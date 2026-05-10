@@ -22,6 +22,22 @@ app.use(
   )
 );
 
+// ── Root ─────────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    service: 'LastLook Data',
+    description: '30-Year Treasury Yield API for AI Agents',
+    website: 'https://www.lastlookmortgage.com',
+    endpoints: [
+      'GET /api/treasury/current — most recent 30yr yield ($0.01 USDC)',
+      'GET /api/treasury/date?d=YYYY-MM-DD — yield on a specific date ($0.01 USDC)',
+      'GET /health — service status (free)',
+    ],
+    payment: 'x402 protocol, USDC on Base network',
+    contact: 'your@email.com',
+  });
+});
+
 // ── Helper: fetch from FRED ───────────────────────────────────────────────────
 async function fetchFRED(startDate, endDate) {
   const cacheKey = `${startDate}_${endDate}`;
