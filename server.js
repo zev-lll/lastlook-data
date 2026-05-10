@@ -16,9 +16,21 @@ async function setupMiddleware() {
   const { HTTPFacilitatorClient } = await import('@x402/core/server');
   const { ExactEvmScheme } = await import('@x402/evm/exact/server');
 
-  const facilitator = new HTTPFacilitatorClient({ url: 'https://api.cdp.coinbase.com/platform/x402/v1' });
+  const facilitator = new HTTPFacilitatorClient({
+    url: 'https://api.cdp.coinbase.com/platform/x402/v1',
+    createAuthHeaders: async () => {
+      const keyName = process.env.CDP_KEY_NAME;
+      const keySecret = process.env.CDP_KEY_SECRET;
+      const token = Buffer.from(`${keyName}:${keySecret}`).toString('base64');
+      return {
+        verify: { Authorization: `Basic ${token}` },
+        settle: { Authorization: `Basic ${token}` },
+      };
+    }
+  });
+
   const resourceServer = new x402ResourceServer(facilitator)
-    .register('eip155:8453', new ExactEvmScheme()); // Base mainnet
+    .register('eip155:8453', new ExactEvmScheme());
 
   const routes = {
     'GET /api/treasury/current': {
@@ -158,3 +170,4 @@ function setupRoutes() {
 }
 
 setupMiddleware().catch(console.error);
+
