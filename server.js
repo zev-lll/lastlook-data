@@ -16,7 +16,7 @@ async function setupMiddleware() {
   const { HTTPFacilitatorClient } = await import('@x402/core/server');
   const { ExactEvmScheme } = await import('@x402/evm/exact/server');
 
-  const facilitator = new HTTPFacilitatorClient({ url: 'https://x402.org/facilitator' });
+  const facilitator = new HTTPFacilitatorClient({ url: 'https://api.cdp.coinbase.com/platform/x402/v1' });
   const resourceServer = new x402ResourceServer(facilitator)
     .register('eip155:8453', new ExactEvmScheme()); // Base mainnet
 
