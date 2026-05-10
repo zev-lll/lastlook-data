@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const NodeCache = require('node-cache');
-const { paymentMiddleware } = require('x402-express');
 
 const app = express();
 const cache = new NodeCache({ stdTTL: 3600 }); // cache responses for 1 hour
@@ -11,18 +10,6 @@ const PORT = process.env.PORT || 3000;
 const FRED_API_KEY = process.env.FRED_API_KEY;
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
 const PRICE_PER_QUERY = process.env.PRICE_PER_QUERY || '0.01'; // $0.01 USDC default
-
-// ── x402 payment middleware ──────────────────────────────────────────────────
-// All routes below this line require payment
-app.use(
-  paymentMiddleware(
-    WALLET_ADDRESS,
-    {
-      '/api/treasury/current': { price: `$${PRICE_PER_QUERY}`, network: 'base' },
-      '/api/treasury/date':    { price: `$${PRICE_PER_QUERY}`, network: 'base' },
-    }
-  )
-);
 
 // ── Helper: fetch from FRED ───────────────────────────────────────────────────
 async function fetchFRED(startDate, endDate) {
