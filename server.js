@@ -6,6 +6,7 @@ const { paymentMiddleware } = require('x402-express');
 
 const app = express();
 const cache = new NodeCache({ stdTTL: 3600 });
+const { facilitator } = require('@coinbase/x402');
 
 const PORT = process.env.PORT || 8080;
 const FRED_API_KEY = process.env.FRED_API_KEY;
@@ -20,14 +21,16 @@ app.use(
         price: `$${PRICE_PER_QUERY}`,
         network: 'base',
         resource: 'https://api.lastlookdata.com/api/treasury/current',
+        description: 'Most recent 30-year US Treasury constant maturity yield',
       },
       'GET /api/treasury/date': {
         price: `$${PRICE_PER_QUERY}`,
         network: 'base',
         resource: 'https://api.lastlookdata.com/api/treasury/date',
+        description: '30-year US Treasury yield for a specific date (YYYY-MM-DD)',
       },
     },
-    { url: 'https://x402.org/facilitator' }
+    facilitator
   )
 );
 
