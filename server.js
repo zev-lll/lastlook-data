@@ -16,8 +16,16 @@ app.use(
   paymentMiddleware(
     WALLET_ADDRESS,
     {
-      'GET /api/treasury/current': { price: `$${PRICE_PER_QUERY}`, network: 'base' },
-      'GET /api/treasury/date':    { price: `$${PRICE_PER_QUERY}`, network: 'base' },
+      'GET /api/treasury/current': {
+        price: `$${PRICE_PER_QUERY}`,
+        network: 'base',
+        resource: 'https://api.lastlookdata.com/api/treasury/current',
+      },
+      'GET /api/treasury/date': {
+        price: `$${PRICE_PER_QUERY}`,
+        network: 'base',
+        resource: 'https://api.lastlookdata.com/api/treasury/date',
+      },
     },
     { url: 'https://x402.org/facilitator' }
   )
