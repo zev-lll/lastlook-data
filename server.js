@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
     description: '30-Year Treasury Yield API for AI Agents',
-    website: 'https://www.lastlookmortgage.com',
+    website: 'https://www.lastlookdata.com',
     endpoints: [
       'GET /api/treasury/current — most recent 30yr yield ($0.01 USDC)',
       'GET /api/treasury/date?d=YYYY-MM-DD — yield on a specific date ($0.01 USDC)',
