@@ -1,7 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import axios from 'axios';
+import express from 'express';
 
 const server = new McpServer({
   name: 'lastlook-data',
@@ -9,7 +11,7 @@ const server = new McpServer({
   description: 'Financial market data for AI agents — powered by LastLook Data'
 });
 
-// ── Tool 1: Get current 30yr Treasury yield ───────────────────────────────
+// ── Tool 1: Current 30yr Treasury yield ──────────────────────────────────
 server.registerTool(
   'get_treasury_yield_current',
   {
@@ -19,9 +21,7 @@ server.registerTool(
   },
   async () => {
     try {
-      const response = await axios.get(
-        'https://api.lastlookdata.com/api/treasury/public'
-      );
+      const response = await axios.get('https://api.lastlookdata.com/api/treasury/public');
       const { yield_percent, date } = response.data;
       return {
         content: [{
@@ -31,17 +31,14 @@ server.registerTool(
       };
     } catch (err) {
       return {
-        content: [{
-          type: 'text',
-          text: `Error fetching Treasury yield: ${err.message}`
-        }],
+        content: [{ type: 'text', text: `Error fetching Treasury yield: ${err.message}` }],
         isError: true
       };
     }
   }
 );
 
-// ── Tool 2: Get 30yr Treasury yield on a specific date ────────────────────
+// ── Tool 2: Yield by date ─────────────────────────────────────────────────
 server.registerTool(
   'get_treasury_yield_by_date',
   {
@@ -55,13 +52,7 @@ server.registerTool(
   async ({ date }) => {
     try {
       const response = await axios.get(
-        `https://api.lastlookdata.com/api/treasury/date?d=${date}`,
-        {
-          headers: {
-            // x402 payment header will be handled by agent's wallet
-            'Accept': 'application/json'
-          }
-        }
+        `https://api.lastlookdata.com/api/treasury/date?d=${date}`
       );
       const { yield_percent, date: dataDate } = response.data;
       return {
@@ -75,21 +66,52 @@ server.registerTool(
         return {
           content: [{
             type: 'text',
-            text: `Payment required: This endpoint costs $0.01 USDC via x402 protocol on Base network.\nEndpoint: https://api.lastlookdata.com/api/treasury/date?d=${date}`
+            text: `Payment required: This endpoint costs $0.01 USDC via x402 on Base.\nEndpoint: https://api.lastlookdata.com/api/treasury/date?d=${date}`
           }]
         };
       }
       return {
-        content: [{
-          type: 'text',
-          text: `Error fetching Treasury yield for ${date}: ${err.message}`
-        }],
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
         isError: true
       };
     }
   }
 );
 
-// ── Start the server ──────────────────────────────────────────────────────
-const transport = new StdioServerTransport();
-await server.connect(transport);
+// ── Transport: HTTP (hosted) or stdio (local) ─────────────────────────────
+const isHTTP = process.env.MCP_TRANSPORT === 'http';
+
+if (isHTTP) {
+  const app = express();
+  app.use(express.json());
+
+  app.post('/mcp', async (req, res) => {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    res.on('close', () => transport.close());
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  app.get('/mcp', async (req, res) => {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    res.on('close', () => transport.close());
+    await server.connect(transport);
+    await transport.handleRequest(req, res);
+  });
+
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', service: 'LastLook Data MCP Server' });
+  });
+
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`LastLook Data MCP server running on port ${PORT}`);
+  });
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
