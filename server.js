@@ -34,7 +34,7 @@ app.get('/', (req, res) => {
       'GET /health — service status (free)',
     ],
     payment: 'x402 protocol, USDC on Base network',
-    contact: 'your@email.com',
+    contact: 'hello@lastlookmortgage.com',
   });
 });
 
