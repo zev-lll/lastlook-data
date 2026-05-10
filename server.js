@@ -11,6 +11,28 @@ const FRED_API_KEY = process.env.FRED_API_KEY;
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
 const PRICE_PER_QUERY = process.env.PRICE_PER_QUERY || '0.01'; // $0.01 USDC default
 
+// ── Free public endpoint for website display ──────────────────────────────
+app.get('/api/treasury/public', async (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  try {
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(today.getDate() - 7);
+    const startDate = weekAgo.toISOString().split('T')[0];
+    const endDate = today.toISOString().split('T')[0];
+    const observations = await fetchFRED(startDate, endDate);
+    const latest = observations.filter(o => o.value !== '.').slice(-1)[0];
+    if (!latest) return res.status(404).json({ error: 'No data available' });
+    res.json({
+      date: latest.date,
+      yield_percent: parseFloat(latest.value),
+      series: 'DGS30'
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch data' });
+  }
+});
+
 // ── x402 payment middleware ──────────────────────────────────────────────────
 app.use(
   paymentMiddleware(
