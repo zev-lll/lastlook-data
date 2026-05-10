@@ -2,7 +2,6 @@
   "name": "lastlook-data",
   "version": "1.0.0",
   "description": "LastLook Data - 30yr Treasury Yield API with x402 payments",
-  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
