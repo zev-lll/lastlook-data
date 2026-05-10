@@ -5,6 +5,7 @@ const NodeCache = require('node-cache');
 const { paymentMiddleware } = require('x402-express');
 
 const app = express();
+app.set('trust proxy', true);
 const cache = new NodeCache({ stdTTL: 3600 });
 const { facilitator } = require('@coinbase/x402');
 
