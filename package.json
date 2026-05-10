@@ -9,11 +9,13 @@
   "dependencies": {
     "@coinbase/coinbase-sdk": "^0.25.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@x402/core": "^2.11.0",
+    "@x402/evm": "^2.11.0",
+    "@x402/express": "^2.11.0",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "node-cache": "^5.1.2",
-    "x402-express": "^1.2.0",
     "zod": "^4.4.3"
   }
 }
