@@ -29,13 +29,9 @@ resourceServer.register('eip155:8453', new ExactEvmScheme());
 // ── Allowed symbols ───────────────────────────────────────────────────────────
 
 const ALLOWED_SERIES = new Set([
-  // Treasury Rates
   'DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO',
-  // Mortgage & Housing
   'MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST',
-  // Benchmark Rates
   'FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3',
-  // Macro Indicators
   'CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP',
 ]);
 
@@ -63,14 +59,79 @@ const FX_LABELS = {
   USDNOK: 'US Dollar / Norwegian Krone',
 };
 
+// ── Bazaar output schemas ─────────────────────────────────────────────────────
+
+const SERIES_OUTPUT = {
+  type: 'object',
+  properties: {
+    service: { type: 'string' },
+    series_id: { type: 'string', description: 'FRED series ID' },
+    days: { type: 'number', description: 'Number of days requested' },
+    count: { type: 'number', description: 'Number of observations returned' },
+    start: { type: 'string', description: 'Start date YYYY-MM-DD' },
+    end: { type: 'string', description: 'End date YYYY-MM-DD' },
+    observations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'Date YYYY-MM-DD' },
+          value: { type: 'number', description: 'Observed value' },
+        },
+      },
+    },
+    note: { type: 'string' },
+  },
+};
+
+const FX_CURRENT_OUTPUT = {
+  type: 'object',
+  properties: {
+    service: { type: 'string' },
+    pair: { type: 'string', description: 'Currency pair e.g. EURUSD' },
+    label: { type: 'string', description: 'Human-readable pair name' },
+    date: { type: 'string', description: 'Date of rate YYYY-MM-DD' },
+    rate: { type: 'number', description: 'Exchange rate' },
+    base: { type: 'string', description: 'Base currency' },
+    quote: { type: 'string', description: 'Quote currency' },
+    note: { type: 'string' },
+  },
+};
+
+const EQUITY_CURRENT_OUTPUT = {
+  type: 'object',
+  properties: {
+    service: { type: 'string' },
+    symbol: { type: 'string', description: 'Index symbol e.g. SPX' },
+    label: { type: 'string', description: 'Human-readable index name' },
+    price: { type: 'number', description: 'Current index price' },
+    change: { type: 'number', description: 'Price change from previous close' },
+    change_percent: { type: 'number', description: 'Percentage change from previous close' },
+    market_time: { type: 'string', description: 'Date of market data YYYY-MM-DD' },
+    note: { type: 'string' },
+  },
+};
+
+const TREASURY_CURRENT_OUTPUT = {
+  type: 'object',
+  properties: {
+    service: { type: 'string' },
+    series: { type: 'string', description: 'Series name' },
+    date: { type: 'string', description: 'Date of observation YYYY-MM-DD' },
+    yield_percent: { type: 'number', description: '30-year Treasury yield as a percentage' },
+    note: { type: 'string' },
+  },
+};
+
 // ── Bazaar discovery helper ───────────────────────────────────────────────────
 
-function bazaarExtension(inputSchema, description) {
+function bazaarExtension(inputSchema, description, outputSchema) {
   return {
     bazaar: {
       discoverable: true,
       description,
       inputSchema,
+      outputSchema,
     },
   };
 }
@@ -81,137 +142,104 @@ app.use(
   paymentMiddleware(
     {
       'GET /api/treasury/current': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.01',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Most recent 30-year US Treasury constant maturity yield',
         mimeType: 'application/json',
-        extensions: bazaarExtension({}, 'Most recent 30-year US Treasury constant maturity yield from FRED'),
+        extensions: bazaarExtension(
+          {},
+          'Most recent 30-year US Treasury constant maturity yield from FRED',
+          TREASURY_CURRENT_OUTPUT
+        ),
       },
       'GET /api/treasury/date': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.01',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: '30-year US Treasury yield for a specific date (YYYY-MM-DD)',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            d: { type: 'string', description: 'Date in YYYY-MM-DD format', required: true },
-          },
-        }, '30-year US Treasury yield for a specific business date'),
+        extensions: bazaarExtension(
+          { queryParams: { d: { type: 'string', description: 'Date in YYYY-MM-DD format', required: true } } },
+          '30-year US Treasury yield for a specific business date',
+          TREASURY_CURRENT_OUTPUT
+        ),
       },
       'GET /api/series/30': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.05',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Last 30 days of daily observations for any supported FRED series',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            id: { type: 'string', description: 'FRED series ID (e.g. DGS30, FEDFUNDS, CPIAUCSL)', required: true },
-          },
-        }, 'Last 30 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators'),
+        extensions: bazaarExtension(
+          { queryParams: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL', required: true } } },
+          'Last 30 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators',
+          SERIES_OUTPUT
+        ),
       },
       'GET /api/series/90': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.10',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Last 90 days of daily observations for any supported FRED series',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            id: { type: 'string', description: 'FRED series ID (e.g. DGS30, FEDFUNDS, CPIAUCSL)', required: true },
-          },
-        }, 'Last 90 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators'),
+        extensions: bazaarExtension(
+          { queryParams: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL', required: true } } },
+          'Last 90 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators',
+          SERIES_OUTPUT
+        ),
       },
       'GET /api/series/365': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.25',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Last 365 days of daily observations for any supported FRED series',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            id: { type: 'string', description: 'FRED series ID (e.g. DGS30, FEDFUNDS, CPIAUCSL)', required: true },
-          },
-        }, 'Last 365 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators'),
+        extensions: bazaarExtension(
+          { queryParams: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL', required: true } } },
+          'Last 365 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators',
+          SERIES_OUTPUT
+        ),
       },
       'GET /api/fx/current': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.01',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Current exchange rate for a G10 currency pair',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            pair: { type: 'string', description: 'G10 currency pair (e.g. EURUSD, USDJPY)', required: true },
-          },
-        }, 'Current G10 FX rate sourced from the European Central Bank via Frankfurter'),
+        extensions: bazaarExtension(
+          { queryParams: { pair: { type: 'string', description: 'G10 currency pair e.g. EURUSD, USDJPY', required: true } } },
+          'Current G10 FX rate sourced from the European Central Bank via Frankfurter',
+          FX_CURRENT_OUTPUT
+        ),
       },
       'GET /api/fx/series': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.05',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Historical daily exchange rates for a G10 currency pair',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            pair: { type: 'string', description: 'G10 currency pair (e.g. EURUSD, USDJPY)', required: true },
-            days: { type: 'string', description: 'Number of days: 30, 90, or 365', required: true },
+        extensions: bazaarExtension(
+          {
+            queryParams: {
+              pair: { type: 'string', description: 'G10 currency pair e.g. EURUSD, USDJPY', required: true },
+              days: { type: 'string', description: 'Number of days: 30, 90, or 365', required: true },
+            },
           },
-        }, 'Historical G10 FX rates sourced from the European Central Bank via Frankfurter'),
+          'Historical G10 FX rates sourced from the European Central Bank via Frankfurter',
+          SERIES_OUTPUT
+        ),
       },
       'GET /api/equity/current': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.01',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Current price for a major US equity index',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX', required: true },
-          },
-        }, 'Current price for S&P 500, NASDAQ 100, Dow Jones, Russell 2000, or VIX'),
+        extensions: bazaarExtension(
+          { queryParams: { symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX', required: true } } },
+          'Current price for S&P 500, NASDAQ 100, Dow Jones, Russell 2000, or VIX',
+          EQUITY_CURRENT_OUTPUT
+        ),
       },
       'GET /api/equity/series': {
-        accepts: [{
-          scheme: 'exact',
-          price: '$0.05',
-          network: 'eip155:8453',
-          payTo: WALLET_ADDRESS,
-        }],
+        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'Historical daily closing prices for a major US equity index',
         mimeType: 'application/json',
-        extensions: bazaarExtension({
-          queryParams: {
-            symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX', required: true },
-            days: { type: 'string', description: 'Number of days: 30, 90, or 365', required: true },
+        extensions: bazaarExtension(
+          {
+            queryParams: {
+              symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX', required: true },
+              days: { type: 'string', description: 'Number of days: 30, 90, or 365', required: true },
+            },
           },
-        }, 'Historical closing prices for S&P 500, NASDAQ 100, Dow Jones, Russell 2000, or VIX'),
+          'Historical closing prices for S&P 500, NASDAQ 100, Dow Jones, Russell 2000, or VIX',
+          SERIES_OUTPUT
+        ),
       },
     },
     resourceServer,
@@ -354,7 +382,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'LastLook Data', version: '2.0.0' });
+  res.json({ status: 'ok', service: 'LastLook Data', version: '2.0.1' });
 });
 
 // ── Routes: FRED ──────────────────────────────────────────────────────────────
