@@ -545,3 +545,4 @@ app.get('/api/equity/series', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`LastLook Data running on port ${PORT}`));
+
