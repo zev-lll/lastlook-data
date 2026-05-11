@@ -60,19 +60,18 @@ const FX_LABELS = {
 };
 
 // ── Bazaar extension builder ──────────────────────────────────────────────────
-// Matches the exact structure the validator expects:
-// extensions.bazaar.info.input and extensions.bazaar.info.output
 
-function bazaar(inputExample, outputExample, description) {
+function bazaar(queryParams, outputExample, description) {
   return {
     bazaar: {
+      name: 'LastLook Data',
       discoverable: true,
       description,
       info: {
         input: {
           type: 'http',
           method: 'GET',
-          ...inputExample,
+          ...(queryParams && Object.keys(queryParams).length > 0 ? { queryParams } : {}),
         },
         output: {
           type: 'json',
@@ -90,92 +89,98 @@ app.use(
     {
       'GET /api/treasury/current': {
         accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Most recent 30-year US Treasury constant maturity yield from FRED',
+        description: 'LastLook Data — most recent 30-year US Treasury yield (DGS30) from FRED',
         mimeType: 'application/json',
         extensions: bazaar(
           {},
           { service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: '2026-05-09', yield_percent: 4.97, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          'Most recent 30-year US Treasury constant maturity yield from FRED'
+          'LastLook Data — current 30-year US Treasury yield. Source: FRED.'
         ),
       },
       'GET /api/treasury/date': {
         accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: '30-year US Treasury yield for a specific business date',
+        description: 'LastLook Data — 30-year US Treasury yield for a specific date (YYYY-MM-DD)',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { d: '2026-05-09' } },
+          { d: { type: 'string', description: 'Date in YYYY-MM-DD format e.g. 2026-05-09', required: true } },
           { service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: '2026-05-09', yield_percent: 4.97, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          '30-year US Treasury yield for a specific business date (YYYY-MM-DD)'
+          'LastLook Data — 30-year US Treasury yield for a specific business date. Pass ?d=YYYY-MM-DD.'
         ),
       },
       'GET /api/series/30': {
         accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Last 30 days of daily observations for any supported FRED series',
+        description: 'LastLook Data — last 30 days of any supported FRED series. Use this to get current mortgage rates, Fed funds rate, CPI, SOFR, Treasury yields, and more.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { id: 'DGS30' } },
-          { service: 'LastLook Data', series_id: 'DGS30', days: 30, count: 21, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 4.89 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          'Last 30 days of FRED data — supports DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP'
+          { id: { type: 'string', description: 'FRED series ID. Examples: MORTGAGE30US (30-yr mortgage rate), MORTGAGE15US (15-yr mortgage rate), DGS10 (10-yr Treasury), FEDFUNDS (Fed funds rate), SOFR, CPIAUCSL (CPI/inflation), UNRATE (unemployment). Full list: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP', required: true } },
+          { service: 'LastLook Data', series_id: 'MORTGAGE30US', days: 30, count: 4, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 6.82 }, { date: '2026-05-09', value: 6.79 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          'LastLook Data — current and recent values for any FRED series. Use ?id=MORTGAGE30US for 30-yr mortgage rate, ?id=MORTGAGE15US for 15-yr mortgage rate, ?id=FEDFUNDS for Fed funds rate, ?id=CPIAUCSL for CPI, ?id=DGS10 for 10-yr Treasury yield, etc.'
         ),
       },
       'GET /api/series/90': {
         accepts: [{ scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Last 90 days of daily observations for any supported FRED series',
+        description: 'LastLook Data — last 90 days of any supported FRED series including mortgage rates, Treasury yields, Fed funds rate, CPI, SOFR, and more.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { id: 'DGS30' } },
+          { id: { type: 'string', description: 'FRED series ID. Examples: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, SOFR, CPIAUCSL, UNRATE, GDP. Full list: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP', required: true } },
           { service: 'LastLook Data', series_id: 'DGS30', days: 90, count: 63, start: '2026-02-09', end: '2026-05-09', observations: [{ date: '2026-02-09', value: 4.75 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          'Last 90 days of FRED data — supports DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP'
+          'LastLook Data — 90 days of any FRED series. Use ?id=MORTGAGE30US for mortgage rates, ?id=FEDFUNDS for Fed funds rate, ?id=CPIAUCSL for CPI, etc.'
         ),
       },
       'GET /api/series/365': {
         accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Last 365 days of daily observations for any supported FRED series',
+        description: 'LastLook Data — last 365 days of any supported FRED series including mortgage rates, Treasury yields, Fed funds rate, CPI, SOFR, and more.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { id: 'DGS30' } },
+          { id: { type: 'string', description: 'FRED series ID. Examples: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, SOFR, CPIAUCSL, UNRATE, GDP. Full list: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP', required: true } },
           { service: 'LastLook Data', series_id: 'DGS30', days: 365, count: 252, start: '2025-05-09', end: '2026-05-09', observations: [{ date: '2025-05-09', value: 4.55 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          'Last 365 days of FRED data — supports DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP'
+          'LastLook Data — 365 days of any FRED series. Use ?id=MORTGAGE30US for mortgage rates, ?id=FEDFUNDS for Fed funds rate, ?id=CPIAUCSL for CPI, etc.'
         ),
       },
       'GET /api/fx/current': {
         accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Current exchange rate for a G10 currency pair',
+        description: 'LastLook Data — current exchange rate for a G10 currency pair. Source: European Central Bank.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { pair: 'EURUSD' } },
+          { pair: { type: 'string', description: 'G10 currency pair. Options: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK', required: true } },
           { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', date: '2026-05-09', rate: 1.1245, base: 'EUR', quote: 'USD', note: 'Source: Frankfurter (European Central Bank)' },
-          'Current G10 FX rate — supports EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK'
+          'LastLook Data — current G10 FX rate. Pass ?pair=EURUSD, ?pair=USDJPY, etc. Source: ECB.'
         ),
       },
       'GET /api/fx/series': {
         accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Historical daily exchange rates for a G10 currency pair',
+        description: 'LastLook Data — historical daily exchange rates for a G10 currency pair. Source: European Central Bank.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { pair: 'EURUSD', days: '30' } },
+          {
+            pair: { type: 'string', description: 'G10 currency pair: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK', required: true },
+            days: { type: 'string', description: 'History window: 30, 90, or 365', required: true },
+          },
           { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', days: 30, count: 21, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 1.1102 }, { date: '2026-05-09', value: 1.1245 }], note: 'Source: Frankfurter (European Central Bank)' },
-          'Historical G10 FX rates — supports EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK — days: 30, 90, or 365'
+          'LastLook Data — historical G10 FX rates. Pass ?pair=EURUSD&days=30. Source: ECB.'
         ),
       },
       'GET /api/equity/current': {
         accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Current price for a major US equity index',
+        description: 'LastLook Data — current price for a major US equity index. Source: Yahoo Finance.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { symbol: 'SPX' } },
+          { symbol: { type: 'string', description: 'Index symbol: SPX (S&P 500), NDX (NASDAQ 100), DJIA (Dow Jones), RUT (Russell 2000), VIX (Volatility Index)', required: true } },
           { service: 'LastLook Data', symbol: 'SPX', label: 'S&P 500', price: 5248.32, change: 12.44, change_percent: 0.24, market_time: '2026-05-09', note: 'Source: Yahoo Finance' },
-          'Current price for a major US equity index — supports SPX, NDX, DJIA, RUT, VIX'
+          'LastLook Data — current equity index price. Pass ?symbol=SPX, ?symbol=NDX, ?symbol=VIX, etc.'
         ),
       },
       'GET /api/equity/series': {
         accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Historical daily closing prices for a major US equity index',
+        description: 'LastLook Data — historical daily closing prices for a major US equity index. Source: Yahoo Finance.',
         mimeType: 'application/json',
         extensions: bazaar(
-          { queryParams: { symbol: 'SPX', days: '30' } },
+          {
+            symbol: { type: 'string', description: 'Index symbol: SPX (S&P 500), NDX (NASDAQ 100), DJIA (Dow Jones), RUT (Russell 2000), VIX (Volatility Index)', required: true },
+            days: { type: 'string', description: 'History window: 30, 90, or 365', required: true },
+          },
           { service: 'LastLook Data', symbol: 'SPX', label: 'S&P 500', days: 30, count: 21, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 5201.44 }, { date: '2026-05-09', value: 5248.32 }], note: 'Source: Yahoo Finance' },
-          'Historical equity index prices — supports SPX, NDX, DJIA, RUT, VIX — days: 30, 90, or 365'
+          'LastLook Data — historical equity index prices. Pass ?symbol=SPX&days=30.'
         ),
       },
     },
@@ -217,8 +222,7 @@ async function fetchFXCurrent(pair) {
   const cacheKey = `fx_current_${pair}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
-  const base = pair.slice(0, 3);
-  const quote = pair.slice(3, 6);
+  const base = pair.slice(0, 3), quote = pair.slice(3, 6);
   const response = await axios.get('https://api.frankfurter.app/latest', { params: { from: base, to: quote } });
   const result = { date: response.data.date, rate: response.data.rates[quote], pair, base, quote };
   cache.set(cacheKey, result, 3600);
@@ -229,8 +233,7 @@ async function fetchFXSeries(pair, days) {
   const cacheKey = `fx_series_${pair}_${days}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
-  const base = pair.slice(0, 3);
-  const quote = pair.slice(3, 6);
+  const base = pair.slice(0, 3), quote = pair.slice(3, 6);
   const response = await axios.get(`https://api.frankfurter.app/${daysAgoISO(days)}..${todayISO()}`, { params: { from: base, to: quote } });
   const observations = Object.entries(response.data.rates)
     .map(([date, rates]) => ({ date, value: rates[quote] }))
@@ -285,13 +288,30 @@ function todayISO() {
 
 app.get('/', (req, res) => {
   res.json({
-    service: 'LastLook Data', version: '2.2.0',
-    description: 'Financial Market Data API for AI Agents',
+    service: 'LastLook Data',
+    version: '2.2.0',
+    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, equity indices. Pay per query via x402, no accounts or API keys required.',
     website: 'https://www.lastlookdata.com',
     payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
-    supported_series: { treasury: ['DGS30','DGS10','DGS5','DGS2','DGS1MO'], mortgage_housing: ['MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST'], benchmark_rates: ['FEDFUNDS','SOFR','DPRIME','DTB3'], macro: ['CPIAUCSL','CPILFESL','UNRATE','GDP'] },
-    supported_fx: [...ALLOWED_FX],
-    supported_equities: [...ALLOWED_EQUITIES],
+    common_use_cases: {
+      'Current 30-yr mortgage rate': 'GET /api/series/30?id=MORTGAGE30US',
+      'Current 15-yr mortgage rate': 'GET /api/series/30?id=MORTGAGE15US',
+      'Current Fed funds rate':      'GET /api/series/30?id=FEDFUNDS',
+      'Current 10-yr Treasury yield':'GET /api/series/30?id=DGS10',
+      'Current 30-yr Treasury yield':'GET /api/treasury/current',
+      'Current CPI (inflation)':     'GET /api/series/30?id=CPIAUCSL',
+      'Current unemployment rate':   'GET /api/series/30?id=UNRATE',
+      'Current EUR/USD rate':        'GET /api/fx/current?pair=EURUSD',
+      'Current S&P 500 level':       'GET /api/equity/current?symbol=SPX',
+    },
+    supported_series: {
+      treasury:        ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
+      mortgage_housing:['MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST'],
+      benchmark_rates: ['FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3'],
+      macro:           ['CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP'],
+    },
+    supported_fx:      [...ALLOWED_FX],
+    supported_equities:[...ALLOWED_EQUITIES],
   });
 });
 
@@ -335,7 +355,11 @@ function seriesHandler(days) {
   return async (req, res) => {
     try {
       const seriesId = (req.query.id || 'DGS30').toUpperCase();
-      if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({ error: `Unknown series "${seriesId}".`, supported_series: [...ALLOWED_SERIES] });
+      if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({
+        error: `Unknown series "${seriesId}".`,
+        supported_series: [...ALLOWED_SERIES],
+        common_examples: 'MORTGAGE30US (30-yr mortgage), MORTGAGE15US (15-yr mortgage), FEDFUNDS (Fed funds rate), DGS10 (10-yr Treasury), CPIAUCSL (CPI)',
+      });
       const obs = await fetchFredSeries(seriesId, daysAgoISO(days), todayISO());
       if (!obs.length) return res.status(404).json({ error: `No data returned for ${seriesId}` });
       res.json({ service: 'LastLook Data', series_id: seriesId, days, count: obs.length, start: obs[0].date, end: obs[obs.length-1].date, observations: obs, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' });
