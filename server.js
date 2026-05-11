@@ -20,7 +20,7 @@ const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
 // ── x402 v2 setup ─────────────────────────────────────────────────────────────
 
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: 'https://api.cdp.coinbase.com/platform/v2/x402',
+  url: 'https://x402.org/facilitator',
 });
 
 const resourceServer = new x402ResourceServer(facilitatorClient);
