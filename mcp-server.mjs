@@ -7,17 +7,48 @@ import express from 'express';
 
 const server = new McpServer({
   name: 'lastlook-data',
-  version: '1.1.0',
+  version: '1.2.0',
   description: 'Financial market data for AI agents — powered by LastLook Data'
 });
 
 const SERIES_LABELS = {
   DGS30:        '30-Year Treasury Constant Maturity Rate',
   DGS10:        '10-Year Treasury Constant Maturity Rate',
+  DGS5:         '5-Year Treasury Constant Maturity Rate',
+  DGS2:         '2-Year Treasury Constant Maturity Rate',
+  DGS1MO:       '1-Month T-Bill Rate',
+  MORTGAGE30US: '30-Year Fixed Rate Mortgage Average',
+  MORTGAGE15US: '15-Year Fixed Rate Mortgage Average',
+  MSPUS:        'Median Sales Price of Houses Sold',
+  HOUST:        'Housing Starts',
   FEDFUNDS:     'Federal Funds Effective Rate',
   SOFR:         'Secured Overnight Financing Rate',
+  DPRIME:       'Bank Prime Loan Rate',
+  DTB3:         '3-Month T-Bill Secondary Market Rate',
   CPIAUCSL:     'Consumer Price Index (All Urban Consumers)',
-  MORTGAGE30US: '30-Year Fixed Rate Mortgage Average',
+  CPILFESL:     'Core CPI ex Food & Energy',
+  UNRATE:       'Unemployment Rate',
+  GDP:          'Gross Domestic Product',
+};
+
+const FX_LABELS = {
+  EURUSD: 'Euro / US Dollar',
+  GBPUSD: 'British Pound / US Dollar',
+  USDJPY: 'US Dollar / Japanese Yen',
+  USDCHF: 'US Dollar / Swiss Franc',
+  USDCAD: 'US Dollar / Canadian Dollar',
+  AUDUSD: 'Australian Dollar / US Dollar',
+  NZDUSD: 'New Zealand Dollar / US Dollar',
+  USDSEK: 'US Dollar / Swedish Krona',
+  USDNOK: 'US Dollar / Norwegian Krone',
+};
+
+const EQUITY_LABELS = {
+  SPX:  'S&P 500',
+  NDX:  'NASDAQ 100',
+  DJIA: 'Dow Jones Industrial Average',
+  RUT:  'Russell 2000',
+  VIX:  'CBOE Volatility Index',
 };
 
 // ── Tool 1: Current 30yr Treasury yield ──────────────────────────────────────
@@ -87,19 +118,25 @@ server.registerTool(
   }
 );
 
-// ── Tool 3: Time series ───────────────────────────────────────────────────────
+// ── Tool 3: FRED time series ──────────────────────────────────────────────────
 server.registerTool(
   'get_series',
   {
-    title: 'Get Time Series Data',
+    title: 'Get FRED Time Series Data',
     description:
       'Returns a time series of daily observations for a supported FRED data series. ' +
-      'Supported series: DGS30 (30-yr Treasury), DGS10 (10-yr Treasury), FEDFUNDS (Fed Funds Rate), ' +
-      'SOFR (Secured Overnight Financing Rate), CPIAUCSL (CPI), MORTGAGE30US (30-yr Mortgage Rate). ' +
+      'Covers Treasury rates (DGS30, DGS10, DGS5, DGS2, DGS1MO), ' +
+      'mortgage & housing (MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST), ' +
+      'benchmark rates (FEDFUNDS, SOFR, DPRIME, DTB3), ' +
+      'and macro indicators (CPIAUCSL, CPILFESL, UNRATE, GDP). ' +
       'Choose a window of 30, 90, or 365 days. Costs $0.05 / $0.10 / $0.25 USDC via x402 on Base.',
     inputSchema: {
-      series_id: z.enum(['DGS30', 'DGS10', 'FEDFUNDS', 'SOFR', 'CPIAUCSL', 'MORTGAGE30US'])
-        .describe('FRED series ID to retrieve'),
+      series_id: z.enum([
+        'DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO',
+        'MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST',
+        'FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3',
+        'CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP',
+      ]).describe('FRED series ID to retrieve'),
       days: z.enum(['30', '90', '365'])
         .describe('Number of calendar days of history to retrieve: 30 ($0.05), 90 ($0.10), or 365 ($0.25)'),
     }
@@ -113,7 +150,6 @@ server.registerTool(
       const { count, start, end, observations } = response.data;
       const label = SERIES_LABELS[series_id] || series_id;
 
-      // Build a compact text table for the agent
       const rows = observations
         .map(o => `  ${o.date}  ${o.value}`)
         .join('\n');
@@ -138,6 +174,209 @@ server.registerTool(
             text:
               `Payment required: This endpoint costs ${prices[days]} USDC via x402 on Base.\n` +
               `Endpoint: ${endpoint}`
+          }]
+        };
+      }
+      return {
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ── Tool 4: Current FX rate ───────────────────────────────────────────────────
+server.registerTool(
+  'get_fx_rate_current',
+  {
+    title: 'Get Current G10 FX Rate',
+    description:
+      'Returns the current exchange rate for a G10 currency pair. ' +
+      'Supported pairs: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK. ' +
+      'Costs $0.01 USDC via x402 on Base.',
+    inputSchema: {
+      pair: z.enum(['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'USDCAD', 'AUDUSD', 'NZDUSD', 'USDSEK', 'USDNOK'])
+        .describe('G10 currency pair to retrieve, e.g. EURUSD'),
+    }
+  },
+  async ({ pair }) => {
+    const endpoint = `https://api.lastlookdata.com/api/fx/current?pair=${pair}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { rate, date, base, quote } = response.data;
+      const label = FX_LABELS[pair] || pair;
+      return {
+        content: [{
+          type: 'text',
+          text: `${label} (${pair}): ${rate} (as of ${date})\nSource: LastLook Data via Frankfurter (ECB)`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Payment required: This endpoint costs $0.01 USDC via x402 on Base.\nEndpoint: ${endpoint}`
+          }]
+        };
+      }
+      return {
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ── Tool 5: FX rate history ───────────────────────────────────────────────────
+server.registerTool(
+  'get_fx_rate_series',
+  {
+    title: 'Get G10 FX Rate History',
+    description:
+      'Returns historical daily exchange rates for a G10 currency pair. ' +
+      'Supported pairs: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK. ' +
+      'Choose a window of 30, 90, or 365 days. Costs $0.05 USDC via x402 on Base.',
+    inputSchema: {
+      pair: z.enum(['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'USDCAD', 'AUDUSD', 'NZDUSD', 'USDSEK', 'USDNOK'])
+        .describe('G10 currency pair to retrieve, e.g. EURUSD'),
+      days: z.enum(['30', '90', '365'])
+        .describe('Number of calendar days of history: 30 ($0.05), 90 ($0.10), or 365 ($0.25)'),
+    }
+  },
+  async ({ pair, days }) => {
+    const prices = { '30': '$0.05', '90': '$0.10', '365': '$0.25' };
+    const endpoint = `https://api.lastlookdata.com/api/fx/series?pair=${pair}&days=${days}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { count, start, end, observations } = response.data;
+      const label = FX_LABELS[pair] || pair;
+
+      const rows = observations
+        .map(o => `  ${o.date}  ${o.value}`)
+        .join('\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `${label} (${pair}) — last ${days} days\n` +
+            `${count} observations from ${start} to ${end}\n\n` +
+            `Date        Rate\n` +
+            `──────────  ────\n` +
+            `${rows}\n\n` +
+            `Source: LastLook Data via Frankfurter (ECB)`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Payment required: This endpoint costs ${prices[days]} USDC via x402 on Base.\nEndpoint: ${endpoint}`
+          }]
+        };
+      }
+      return {
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ── Tool 6: Current equity index price ───────────────────────────────────────
+server.registerTool(
+  'get_equity_index_current',
+  {
+    title: 'Get Current Equity Index Price',
+    description:
+      'Returns the current price for a major US equity index. ' +
+      'Supported symbols: SPX (S&P 500), NDX (NASDAQ 100), DJIA (Dow Jones), RUT (Russell 2000), VIX (Volatility Index). ' +
+      'Costs $0.01 USDC via x402 on Base.',
+    inputSchema: {
+      symbol: z.enum(['SPX', 'NDX', 'DJIA', 'RUT', 'VIX'])
+        .describe('Equity index symbol to retrieve'),
+    }
+  },
+  async ({ symbol }) => {
+    const endpoint = `https://api.lastlookdata.com/api/equity/current?symbol=${symbol}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { price, change, change_percent, market_time, label } = response.data;
+      const changeSign = change >= 0 ? '+' : '';
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `${label} (${symbol}): ${price}\n` +
+            `Change: ${changeSign}${change?.toFixed(2)} (${changeSign}${change_percent?.toFixed(2)}%)\n` +
+            `As of: ${market_time}\n` +
+            `Source: LastLook Data via Yahoo Finance`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Payment required: This endpoint costs $0.01 USDC via x402 on Base.\nEndpoint: ${endpoint}`
+          }]
+        };
+      }
+      return {
+        content: [{ type: 'text', text: `Error: ${err.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ── Tool 7: Equity index history ─────────────────────────────────────────────
+server.registerTool(
+  'get_equity_index_series',
+  {
+    title: 'Get Equity Index Price History',
+    description:
+      'Returns historical daily closing prices for a major US equity index. ' +
+      'Supported symbols: SPX (S&P 500), NDX (NASDAQ 100), DJIA (Dow Jones), RUT (Russell 2000), VIX (Volatility Index). ' +
+      'Choose a window of 30, 90, or 365 days. Costs $0.05 / $0.10 / $0.25 USDC via x402 on Base.',
+    inputSchema: {
+      symbol: z.enum(['SPX', 'NDX', 'DJIA', 'RUT', 'VIX'])
+        .describe('Equity index symbol to retrieve'),
+      days: z.enum(['30', '90', '365'])
+        .describe('Number of calendar days of history: 30 ($0.05), 90 ($0.10), or 365 ($0.25)'),
+    }
+  },
+  async ({ symbol, days }) => {
+    const prices = { '30': '$0.05', '90': '$0.10', '365': '$0.25' };
+    const endpoint = `https://api.lastlookdata.com/api/equity/series?symbol=${symbol}&days=${days}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { count, start, end, observations, label } = response.data;
+
+      const rows = observations
+        .map(o => `  ${o.date}  ${o.value}`)
+        .join('\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `${label} (${symbol}) — last ${days} days\n` +
+            `${count} observations from ${start} to ${end}\n\n` +
+            `Date        Close\n` +
+            `──────────  ─────\n` +
+            `${rows}\n\n` +
+            `Source: LastLook Data via Yahoo Finance`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Payment required: This endpoint costs ${prices[days]} USDC via x402 on Base.\nEndpoint: ${endpoint}`
           }]
         };
       }
@@ -175,7 +414,7 @@ if (isHTTP) {
   });
 
   app.get('/health', (req, res) => {
-    res.json({ status: 'ok', service: 'LastLook Data MCP Server', version: '1.1.0' });
+    res.json({ status: 'ok', service: 'LastLook Data MCP Server', version: '1.2.0' });
   });
 
   const PORT = process.env.PORT || 3001;
