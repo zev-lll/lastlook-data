@@ -20,7 +20,7 @@ const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
 // ── x402 v2 setup ─────────────────────────────────────────────────────────────
 
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: 'https://x402.org/facilitator',
+  url: 'https://facilitator.xpay.sh',
 });
 
 const resourceServer = new x402ResourceServer(facilitatorClient);
