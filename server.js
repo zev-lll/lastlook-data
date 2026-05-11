@@ -4,10 +4,12 @@ const axios = require('axios');
 const NodeCache = require('node-cache');
 const yahooFinance = require('yahoo-finance2').default;
 
-// x402 v2 packages
-const { paymentMiddleware, x402ResourceServer } = require('@x402/express');
-const { HTTPFacilitatorClient } = require('@x402/core/server');
-const { ExactEvmScheme } = require('@x402/evm/exact/server');
+// x402 v1 packages (CDP facilitator requires @coinbase/x402@1.x)
+const { paymentMiddleware } = require('x402-express');
+const { facilitator } = require('@coinbase/x402');
+
+// Bazaar discovery extension
+const { declareDiscoveryExtension } = require('@x402/extensions/bazaar');
 
 const app = express();
 app.set('trust proxy', true);
@@ -16,15 +18,6 @@ const cache = new NodeCache({ stdTTL: 3600 });
 const PORT = process.env.PORT || 8080;
 const FRED_API_KEY = process.env.FRED_API_KEY;
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
-
-// ── x402 v2 setup ─────────────────────────────────────────────────────────────
-
-const facilitatorClient = new HTTPFacilitatorClient({
-  url: 'https://facilitator.xpay.sh',
-});
-
-const resourceServer = new x402ResourceServer(facilitatorClient);
-resourceServer.register('eip155:8453', new ExactEvmScheme());
 
 // ── Allowed symbols ───────────────────────────────────────────────────────────
 
@@ -59,190 +52,274 @@ const FX_LABELS = {
   USDNOK: 'US Dollar / Norwegian Krone',
 };
 
-// ── Bazaar output schemas ─────────────────────────────────────────────────────
-
-const SERIES_OUTPUT = {
-  type: 'object',
-  properties: {
-    service: { type: 'string' },
-    series_id: { type: 'string', description: 'FRED series ID' },
-    days: { type: 'number', description: 'Number of days requested' },
-    count: { type: 'number', description: 'Number of observations returned' },
-    start: { type: 'string', description: 'Start date YYYY-MM-DD' },
-    end: { type: 'string', description: 'End date YYYY-MM-DD' },
-    observations: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          date: { type: 'string', description: 'Date YYYY-MM-DD' },
-          value: { type: 'number', description: 'Observed value' },
-        },
-      },
-    },
-    note: { type: 'string' },
-  },
-};
-
-const FX_CURRENT_OUTPUT = {
-  type: 'object',
-  properties: {
-    service: { type: 'string' },
-    pair: { type: 'string', description: 'Currency pair e.g. EURUSD' },
-    label: { type: 'string', description: 'Human-readable pair name' },
-    date: { type: 'string', description: 'Date of rate YYYY-MM-DD' },
-    rate: { type: 'number', description: 'Exchange rate' },
-    base: { type: 'string', description: 'Base currency' },
-    quote: { type: 'string', description: 'Quote currency' },
-    note: { type: 'string' },
-  },
-};
-
-const EQUITY_CURRENT_OUTPUT = {
-  type: 'object',
-  properties: {
-    service: { type: 'string' },
-    symbol: { type: 'string', description: 'Index symbol e.g. SPX' },
-    label: { type: 'string', description: 'Human-readable index name' },
-    price: { type: 'number', description: 'Current index price' },
-    change: { type: 'number', description: 'Price change from previous close' },
-    change_percent: { type: 'number', description: 'Percentage change from previous close' },
-    market_time: { type: 'string', description: 'Date of market data YYYY-MM-DD' },
-    note: { type: 'string' },
-  },
-};
-
-const TREASURY_CURRENT_OUTPUT = {
-  type: 'object',
-  properties: {
-    service: { type: 'string' },
-    series: { type: 'string', description: 'Series name' },
-    date: { type: 'string', description: 'Date of observation YYYY-MM-DD' },
-    yield_percent: { type: 'number', description: '30-year Treasury yield as a percentage' },
-    note: { type: 'string' },
-  },
-};
-
-// ── Bazaar discovery helper ───────────────────────────────────────────────────
-
-function bazaarExtension(inputSchema, description, outputSchema) {
-  return {
-    bazaar: {
-      discoverable: true,
-      description,
-      inputSchema,
-      outputSchema,
-    },
-  };
-}
-
-// ── x402 v2 payment middleware ────────────────────────────────────────────────
+// ── x402 payment middleware with Bazaar extensions ────────────────────────────
+// Uses CDP facilitator (reads CDP_API_KEY_ID + CDP_API_KEY_SECRET from env)
 
 app.use(
   paymentMiddleware(
+    WALLET_ADDRESS,
     {
       'GET /api/treasury/current': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Most recent 30-year US Treasury constant maturity yield',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          {},
-          'Most recent 30-year US Treasury constant maturity yield from FRED',
-          TREASURY_CURRENT_OUTPUT
-        ),
+        price: '$0.01',
+        network: 'base',
+        config: {
+          description: 'Most recent 30-year US Treasury constant maturity yield from FRED',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: {},
+            output: {
+              example: {
+                service: 'LastLook Data',
+                series: 'DGS30 - 30-Year Treasury Constant Maturity Rate',
+                date: '2026-05-09',
+                yield_percent: 4.97,
+                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/treasury/date': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: '30-year US Treasury yield for a specific date (YYYY-MM-DD)',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          { queryParams: { d: { type: 'string', description: 'Date in YYYY-MM-DD format', required: true } } },
-          '30-year US Treasury yield for a specific business date',
-          TREASURY_CURRENT_OUTPUT
-        ),
+        price: '$0.01',
+        network: 'base',
+        config: {
+          description: '30-year US Treasury yield for a specific business date',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { d: '2026-05-09' },
+            inputSchema: {
+              properties: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } },
+              required: ['d'],
+            },
+            output: {
+              example: {
+                service: 'LastLook Data',
+                series: 'DGS30 - 30-Year Treasury Constant Maturity Rate',
+                date: '2026-05-09',
+                yield_percent: 4.97,
+                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/series/30': {
-        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Last 30 days of daily observations for any supported FRED series',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          { queryParams: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL', required: true } } },
-          'Last 30 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators',
-          SERIES_OUTPUT
-        ),
+        price: '$0.05',
+        network: 'base',
+        config: {
+          description: 'Last 30 days of daily observations for any supported FRED series',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { id: 'DGS30' },
+            inputSchema: {
+              properties: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL' } },
+              required: ['id'],
+            },
+            output: {
+              example: {
+                service: 'LastLook Data',
+                series_id: 'DGS30',
+                days: 30,
+                count: 21,
+                start: '2026-04-10',
+                end: '2026-05-09',
+                observations: [{ date: '2026-04-10', value: 4.89 }, { date: '2026-05-09', value: 4.97 }],
+                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/series/90': {
-        accepts: [{ scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Last 90 days of daily observations for any supported FRED series',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          { queryParams: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL', required: true } } },
-          'Last 90 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators',
-          SERIES_OUTPUT
-        ),
+        price: '$0.10',
+        network: 'base',
+        config: {
+          description: 'Last 90 days of daily observations for any supported FRED series',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { id: 'DGS30' },
+            inputSchema: {
+              properties: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL' } },
+              required: ['id'],
+            },
+            output: {
+              example: {
+                service: 'LastLook Data',
+                series_id: 'DGS30',
+                days: 90,
+                count: 63,
+                start: '2026-02-09',
+                end: '2026-05-09',
+                observations: [{ date: '2026-02-09', value: 4.75 }, { date: '2026-05-09', value: 4.97 }],
+                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/series/365': {
-        accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Last 365 days of daily observations for any supported FRED series',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          { queryParams: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL', required: true } } },
-          'Last 365 days of FRED data — Treasury, mortgage, benchmark rates, and macro indicators',
-          SERIES_OUTPUT
-        ),
+        price: '$0.25',
+        network: 'base',
+        config: {
+          description: 'Last 365 days of daily observations for any supported FRED series',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { id: 'DGS30' },
+            inputSchema: {
+              properties: { id: { type: 'string', description: 'FRED series ID e.g. DGS30, FEDFUNDS, CPIAUCSL' } },
+              required: ['id'],
+            },
+            output: {
+              example: {
+                service: 'LastLook Data',
+                series_id: 'DGS30',
+                days: 365,
+                count: 252,
+                start: '2025-05-09',
+                end: '2026-05-09',
+                observations: [{ date: '2025-05-09', value: 4.55 }, { date: '2026-05-09', value: 4.97 }],
+                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/fx/current': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Current exchange rate for a G10 currency pair',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          { queryParams: { pair: { type: 'string', description: 'G10 currency pair e.g. EURUSD, USDJPY', required: true } } },
-          'Current G10 FX rate sourced from the European Central Bank via Frankfurter',
-          FX_CURRENT_OUTPUT
-        ),
+        price: '$0.01',
+        network: 'base',
+        config: {
+          description: 'Current exchange rate for a G10 currency pair, sourced from the European Central Bank',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { pair: 'EURUSD' },
+            inputSchema: {
+              properties: { pair: { type: 'string', description: 'G10 currency pair e.g. EURUSD, USDJPY, GBPUSD' } },
+              required: ['pair'],
+            },
+            output: {
+              example: {
+                service: 'LastLook Data',
+                pair: 'EURUSD',
+                label: 'Euro / US Dollar',
+                date: '2026-05-09',
+                rate: 1.1245,
+                base: 'EUR',
+                quote: 'USD',
+                note: 'Source: Frankfurter (European Central Bank)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/fx/series': {
-        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Historical daily exchange rates for a G10 currency pair',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          {
-            queryParams: {
-              pair: { type: 'string', description: 'G10 currency pair e.g. EURUSD, USDJPY', required: true },
-              days: { type: 'string', description: 'Number of days: 30, 90, or 365', required: true },
+        price: '$0.05',
+        network: 'base',
+        config: {
+          description: 'Historical daily exchange rates for a G10 currency pair',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { pair: 'EURUSD', days: '30' },
+            inputSchema: {
+              properties: {
+                pair: { type: 'string', description: 'G10 currency pair e.g. EURUSD, USDJPY' },
+                days: { type: 'string', description: 'Number of days: 30, 90, or 365' },
+              },
+              required: ['pair', 'days'],
             },
-          },
-          'Historical G10 FX rates sourced from the European Central Bank via Frankfurter',
-          SERIES_OUTPUT
-        ),
+            output: {
+              example: {
+                service: 'LastLook Data',
+                pair: 'EURUSD',
+                label: 'Euro / US Dollar',
+                days: 30,
+                count: 21,
+                start: '2026-04-10',
+                end: '2026-05-09',
+                observations: [{ date: '2026-04-10', value: 1.1102 }, { date: '2026-05-09', value: 1.1245 }],
+                note: 'Source: Frankfurter (European Central Bank)',
+              },
+            },
+          }),
+        },
       },
       'GET /api/equity/current': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Current price for a major US equity index',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          { queryParams: { symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX', required: true } } },
-          'Current price for S&P 500, NASDAQ 100, Dow Jones, Russell 2000, or VIX',
-          EQUITY_CURRENT_OUTPUT
-        ),
+        price: '$0.01',
+        network: 'base',
+        config: {
+          description: 'Current price for a major US equity index',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { symbol: 'SPX' },
+            inputSchema: {
+              properties: { symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX' } },
+              required: ['symbol'],
+            },
+            output: {
+              example: {
+                service: 'LastLook Data',
+                symbol: 'SPX',
+                label: 'S&P 500',
+                price: 5248.32,
+                change: 12.44,
+                change_percent: 0.24,
+                market_time: '2026-05-09',
+                note: 'Source: Yahoo Finance',
+              },
+            },
+          }),
+        },
       },
       'GET /api/equity/series': {
-        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
-        description: 'Historical daily closing prices for a major US equity index',
-        mimeType: 'application/json',
-        extensions: bazaarExtension(
-          {
-            queryParams: {
-              symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX', required: true },
-              days: { type: 'string', description: 'Number of days: 30, 90, or 365', required: true },
+        price: '$0.05',
+        network: 'base',
+        config: {
+          description: 'Historical daily closing prices for a major US equity index',
+          mimeType: 'application/json',
+        },
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { symbol: 'SPX', days: '30' },
+            inputSchema: {
+              properties: {
+                symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX' },
+                days: { type: 'string', description: 'Number of days: 30, 90, or 365' },
+              },
+              required: ['symbol', 'days'],
             },
-          },
-          'Historical closing prices for S&P 500, NASDAQ 100, Dow Jones, Russell 2000, or VIX',
-          SERIES_OUTPUT
-        ),
+            output: {
+              example: {
+                service: 'LastLook Data',
+                symbol: 'SPX',
+                label: 'S&P 500',
+                days: 30,
+                count: 21,
+                start: '2026-04-10',
+                end: '2026-05-09',
+                observations: [{ date: '2026-04-10', value: 5201.44 }, { date: '2026-05-09', value: 5248.32 }],
+                note: 'Source: Yahoo Finance',
+              },
+            },
+          }),
+        },
       },
     },
-    resourceServer,
+    facilitator,
   )
 );
 
@@ -348,13 +425,13 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// ── Routes: info ──────────────────────────────────────────────────────────────
+// ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
     description: 'Financial Market Data API for AI Agents',
-    version: '2.0.0',
+    version: '2.1.0',
     website: 'https://www.lastlookdata.com',
     endpoints: [
       'GET /api/treasury/current — most recent 30yr yield ($0.01 USDC)',
@@ -377,15 +454,13 @@ app.get('/', (req, res) => {
     },
     supported_fx: [...ALLOWED_FX],
     supported_equities: [...ALLOWED_EQUITIES],
-    payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
+    payment: 'x402 protocol, USDC on Base mainnet',
   });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'LastLook Data', version: '2.0.1' });
+  res.json({ status: 'ok', service: 'LastLook Data', version: '2.1.0' });
 });
-
-// ── Routes: FRED ──────────────────────────────────────────────────────────────
 
 app.get('/api/treasury/public', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -447,8 +522,6 @@ app.get('/api/series/30', seriesHandler(30));
 app.get('/api/series/90', seriesHandler(90));
 app.get('/api/series/365', seriesHandler(365));
 
-// ── Routes: FX ────────────────────────────────────────────────────────────────
-
 app.get('/api/fx/current', async (req, res) => {
   try {
     const pair = (req.query.pair || '').toUpperCase();
@@ -473,8 +546,6 @@ app.get('/api/fx/series', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch FX data' });
   }
 });
-
-// ── Routes: Equities ──────────────────────────────────────────────────────────
 
 app.get('/api/equity/current', async (req, res) => {
   try {
