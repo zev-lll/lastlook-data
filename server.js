@@ -16,12 +16,27 @@ const PRICE_PER_QUERY = process.env.PRICE_PER_QUERY || '0.01';
 
 // Allowed FRED series IDs — expand as new data is added
 const ALLOWED_SERIES = new Set([
-  'DGS30',        // 30-Year Treasury
-  'DGS10',        // 10-Year Treasury
-  'FEDFUNDS',     // Fed Funds Rate
+  // Treasury Rates
+  'DGS30',        // 30-Year Treasury Constant Maturity
+  'DGS10',        // 10-Year Treasury Constant Maturity
+  'DGS5',         // 5-Year Treasury Constant Maturity
+  'DGS2',         // 2-Year Treasury Constant Maturity
+  'DGS1MO',       // 1-Month T-Bill Rate
+  // Mortgage & Housing
+  'MORTGAGE30US', // 30-Year Fixed Mortgage Average
+  'MORTGAGE15US', // 15-Year Fixed Mortgage Average
+  'MSPUS',        // Median Home Sales Price (quarterly)
+  'HOUST',        // Housing Starts
+  // Benchmark Rates
+  'FEDFUNDS',     // Federal Funds Effective Rate
   'SOFR',         // Secured Overnight Financing Rate
-  'CPIAUCSL',     // CPI
-  'MORTGAGE30US', // 30-Year Mortgage Rate
+  'DPRIME',       // Bank Prime Loan Rate
+  'DTB3',         // 3-Month T-Bill Rate
+  // Macro Indicators
+  'CPIAUCSL',     // CPI All Urban Consumers
+  'CPILFESL',     // Core CPI ex Food & Energy
+  'UNRATE',       // Unemployment Rate
+  'GDP',          // Gross Domestic Product (quarterly)
 ]);
 
 app.use(
@@ -135,7 +150,12 @@ app.get('/', (req, res) => {
       'GET /api/series/365?id=DGS30 — last 365 days of observations ($0.25 USDC)',
       'GET /health — service status',
     ],
-    supported_series: [...ALLOWED_SERIES],
+    supported_series: {
+  treasury: ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
+  mortgage_housing: ['MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST'],
+  benchmark_rates: ['FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3'],
+  macro: ['CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP'],
+},
     payment: 'x402 protocol, USDC on Base network',
   });
 });
