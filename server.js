@@ -33,7 +33,7 @@ const ALLOWED_SERIES = new Set([
   // Mortgage & Housing
   'MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST',
   // Benchmark Rates
-  'FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3',
+  'FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3', 'IORB', 'EFFR',
   // Macro Indicators
   'CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP',
   // Energy
@@ -102,26 +102,26 @@ app.use(
       },
       'GET /api/series/30': {
         accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
-        description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates (?id=MORTGAGE30US or MORTGAGE15US), Fed funds rate (?id=FEDFUNDS), 10-yr Treasury (?id=DGS10), CPI (?id=CPIAUCSL), unemployment (?id=UNRATE), crude oil (?id=DCOILWTICO), and more.',
+        description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates, Fed funds rate, IORB, EFFR, CPI, Treasury yields, energy prices, unemployment, and more.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { id: 'MORTGAGE30US' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, SOFR, CPIAUCSL, UNRATE, DCOILWTICO (WTI crude), DCOILBRENTEU (Brent crude), GASREGCOVW (gasoline), DHHNGSP (natural gas), and more' },
+                id: { type: 'string', description: 'FRED series ID: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, IORB, EFFR, SOFR, CPIAUCSL, UNRATE, DCOILWTICO, DCOILBRENTEU, GASREGCOVW, DHHNGSP, and more' },
               },
               required: ['id'],
             },
             output: {
               example: {
                 service: 'LastLook Data',
-                series_id: 'DCOILWTICO',
+                series_id: 'MORTGAGE30US',
                 days: 30,
-                count: 21,
+                count: 4,
                 start: '2026-04-10',
                 end: '2026-05-09',
-                observations: [{ date: '2026-04-10', value: 61.42 }, { date: '2026-05-09', value: 58.73 }],
+                observations: [{ date: '2026-04-10', value: 6.82 }, { date: '2026-05-09', value: 6.79 }],
                 note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
               },
             },
@@ -312,14 +312,16 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.6.0',
-    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates. Pay per query via x402, no accounts or API keys required.',
+    version: '2.6.1',
+    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
     common_use_cases: {
       'Current 30-yr mortgage rate': 'GET /api/series/30?id=MORTGAGE30US',
       'Current 15-yr mortgage rate': 'GET /api/series/30?id=MORTGAGE15US',
       'Current Fed funds rate':      'GET /api/series/30?id=FEDFUNDS',
+      'Current IORB rate':           'GET /api/series/30?id=IORB',
+      'Current EFFR rate':           'GET /api/series/30?id=EFFR',
       'Current 10-yr Treasury yield':'GET /api/series/30?id=DGS10',
       'Current 30-yr Treasury yield':'GET /api/treasury/current',
       'Current CPI (inflation)':     'GET /api/series/30?id=CPIAUCSL',
@@ -327,13 +329,12 @@ app.get('/', (req, res) => {
       'Current WTI crude oil price': 'GET /api/series/30?id=DCOILWTICO',
       'Current Brent crude price':   'GET /api/series/30?id=DCOILBRENTEU',
       'Current natural gas price':   'GET /api/series/30?id=DHHNGSP',
-      'Current gasoline price':      'GET /api/series/30?id=GASREGCOVW',
       'Current EUR/USD rate':        'GET /api/fx/current?pair=EURUSD',
     },
     supported_series: {
       treasury:        ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
       mortgage_housing:['MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST'],
-      benchmark_rates: ['FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3'],
+      benchmark_rates: ['FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3', 'IORB', 'EFFR'],
       macro:           ['CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP'],
       energy:          ['DCOILWTICO', 'DCOILBRENTEU', 'GASREGCOVW', 'DHHNGSP'],
     },
@@ -341,7 +342,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.6.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.6.1' }));
 
 app.get('/api/treasury/public', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -384,7 +385,7 @@ function seriesHandler(days) {
       if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({
         error: `Unknown series "${seriesId}".`,
         supported_series: [...ALLOWED_SERIES],
-        common_examples: 'MORTGAGE30US, FEDFUNDS, DGS10, CPIAUCSL, DCOILWTICO',
+        common_examples: 'MORTGAGE30US, FEDFUNDS, IORB, EFFR, DGS10, CPIAUCSL, DCOILWTICO',
       });
       const obs = await fetchFredSeries(seriesId, daysAgoISO(days), todayISO());
       if (!obs.length) return res.status(404).json({ error: `No data returned for ${seriesId}` });

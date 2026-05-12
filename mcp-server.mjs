@@ -7,7 +7,7 @@ import express from 'express';
 
 const server = new McpServer({
   name: 'lastlook-data',
-  version: '2.6.0',
+  version: '2.6.1',
   description: 'LastLook Data — financial market data for AI agents. FRED macro data, G10 FX rates, and energy prices. Pay per query via x402.'
 });
 
@@ -25,6 +25,8 @@ const SERIES_LABELS = {
   SOFR:         'Secured Overnight Financing Rate',
   DPRIME:       'Bank Prime Loan Rate',
   DTB3:         '3-Month T-Bill Secondary Market Rate',
+  IORB:         'Interest on Reserve Balances',
+  EFFR:         'Effective Federal Funds Rate',
   CPIAUCSL:     'Consumer Price Index (All Urban Consumers)',
   CPILFESL:     'Core CPI ex Food & Energy',
   UNRATE:       'Unemployment Rate',
@@ -97,11 +99,13 @@ server.registerTool(
     title: 'Get FRED Data Series',
     description:
       'Returns recent observations for any supported FRED data series. ' +
-      'Use this to get current and historical values for mortgage rates, Treasury yields, Fed funds rate, CPI, SOFR, unemployment, GDP, and energy prices. ' +
+      'Use this to get current and historical values for mortgage rates, Treasury yields, Fed funds rate, CPI, SOFR, unemployment, GDP, energy prices, and more. ' +
       'Common use cases:\n' +
       '- Current 30-yr mortgage rate: series_id=MORTGAGE30US, days=30\n' +
       '- Current 15-yr mortgage rate: series_id=MORTGAGE15US, days=30\n' +
       '- Current Fed funds rate: series_id=FEDFUNDS, days=30\n' +
+      '- Current IORB (Interest on Reserve Balances): series_id=IORB, days=30\n' +
+      '- Current EFFR (Effective Fed Funds Rate): series_id=EFFR, days=30\n' +
       '- Current 10-yr Treasury yield: series_id=DGS10, days=30\n' +
       '- Current CPI (inflation): series_id=CPIAUCSL, days=30\n' +
       '- Current unemployment rate: series_id=UNRATE, days=30\n' +
@@ -114,10 +118,10 @@ server.registerTool(
       series_id: z.enum([
         'DGS30','DGS10','DGS5','DGS2','DGS1MO',
         'MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST',
-        'FEDFUNDS','SOFR','DPRIME','DTB3',
+        'FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR',
         'CPIAUCSL','CPILFESL','UNRATE','GDP',
         'DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP',
-      ]).describe('FRED series ID. Use DCOILWTICO for WTI crude oil, DCOILBRENTEU for Brent crude, DHHNGSP for natural gas, GASREGCOVW for gasoline, MORTGAGE30US for 30-yr mortgage rate, FEDFUNDS for Fed funds rate, etc.'),
+      ]).describe('FRED series ID. Use IORB for Interest on Reserve Balances, EFFR for Effective Federal Funds Rate, FEDFUNDS for Fed funds monthly average, MORTGAGE30US for 30-yr mortgage rate, DCOILWTICO for WTI crude oil, etc.'),
       days: z.enum(['30','90','365']).describe('History window: 30 ($0.05), 90 ($0.10), or 365 ($0.25). Use 30 for current/recent values.'),
     }
   },
@@ -231,7 +235,7 @@ if (isHTTP) {
     await transport.handleRequest(req, res);
   });
 
-  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.6.0' }));
+  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.6.1' }));
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`LastLook Data MCP server running on port ${PORT}`));
