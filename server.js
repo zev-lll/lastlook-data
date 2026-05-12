@@ -2,15 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const NodeCache = require('node-cache');
-const yahooFinance = require('yahoo-finance2').default;
 
-// x402 v2 packages
+// x402 v2 with CDP facilitator + Bazaar discovery
 const { paymentMiddleware } = require('@x402/express');
 const { x402ResourceServer, HTTPFacilitatorClient } = require('@x402/core/server');
 const { registerExactEvmScheme } = require('@x402/evm/exact/server');
 const { bazaarResourceServerExtension, declareDiscoveryExtension } = require('@x402/extensions/bazaar');
-
-// CDP facilitator — reads CDP_API_KEY_ID + CDP_API_KEY_SECRET from env automatically
 const { facilitator: cdpFacilitator } = require('@coinbase/x402');
 
 const app = express();
@@ -31,27 +28,22 @@ server.registerExtension(bazaarResourceServerExtension);
 // ── Allowed symbols ───────────────────────────────────────────────────────────
 
 const ALLOWED_SERIES = new Set([
+  // Treasury Rates
   'DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO',
+  // Mortgage & Housing
   'MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST',
+  // Benchmark Rates
   'FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3',
+  // Macro Indicators
   'CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP',
+  // Energy
+  'DCOILWTICO', 'DCOILBRENTEU', 'GASREGCOVW', 'DHHNGSP',
 ]);
 
 const ALLOWED_FX = new Set([
   'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF',
   'USDCAD', 'AUDUSD', 'NZDUSD', 'USDSEK', 'USDNOK',
 ]);
-
-const ALLOWED_EQUITIES = new Set(['SPX', 'NDX', 'DJIA', 'RUT', 'VIX']);
-
-const EQUITY_YAHOO_SYMBOLS = {
-  SPX: '^GSPC', NDX: '^NDX', DJIA: '^DJI', RUT: '^RUT', VIX: '^VIX',
-};
-
-const EQUITY_LABELS = {
-  SPX: 'S&P 500', NDX: 'NASDAQ 100', DJIA: 'Dow Jones Industrial Average',
-  RUT: 'Russell 2000', VIX: 'CBOE Volatility Index',
-};
 
 const FX_LABELS = {
   EURUSD: 'Euro / US Dollar', GBPUSD: 'British Pound / US Dollar',
@@ -110,26 +102,26 @@ app.use(
       },
       'GET /api/series/30': {
         accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
-        description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates (?id=MORTGAGE30US or MORTGAGE15US), Fed funds rate (?id=FEDFUNDS), 10-yr Treasury (?id=DGS10), CPI (?id=CPIAUCSL), unemployment (?id=UNRATE), and more.',
+        description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates (?id=MORTGAGE30US or MORTGAGE15US), Fed funds rate (?id=FEDFUNDS), 10-yr Treasury (?id=DGS10), CPI (?id=CPIAUCSL), unemployment (?id=UNRATE), crude oil (?id=DCOILWTICO), and more.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { id: 'MORTGAGE30US' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, SOFR, CPIAUCSL, UNRATE, GDP, and more' },
+                id: { type: 'string', description: 'FRED series ID: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, SOFR, CPIAUCSL, UNRATE, DCOILWTICO (WTI crude), DCOILBRENTEU (Brent crude), GASREGCOVW (gasoline), DHHNGSP (natural gas), and more' },
               },
               required: ['id'],
             },
             output: {
               example: {
                 service: 'LastLook Data',
-                series_id: 'MORTGAGE30US',
+                series_id: 'DCOILWTICO',
                 days: 30,
-                count: 4,
+                count: 21,
                 start: '2026-04-10',
                 end: '2026-05-09',
-                observations: [{ date: '2026-04-10', value: 6.82 }, { date: '2026-05-09', value: 6.79 }],
+                observations: [{ date: '2026-04-10', value: 61.42 }, { date: '2026-05-09', value: 58.73 }],
                 note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
               },
             },
@@ -244,62 +236,6 @@ app.use(
           }),
         },
       },
-      'GET /api/equity/current': {
-        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
-        description: 'LastLook Data — current price for a major US equity index: SPX, NDX, DJIA, RUT, VIX.',
-        mimeType: 'application/json',
-        extensions: {
-          ...declareDiscoveryExtension({
-            input: { symbol: 'SPX' },
-            inputSchema: {
-              properties: { symbol: { type: 'string', description: 'SPX, NDX, DJIA, RUT, or VIX' } },
-              required: ['symbol'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                symbol: 'SPX',
-                label: 'S&P 500',
-                price: 5248.32,
-                change: 12.44,
-                change_percent: 0.24,
-                market_time: '2026-05-09',
-                note: 'Source: Yahoo Finance',
-              },
-            },
-          }),
-        },
-      },
-      'GET /api/equity/series': {
-        accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
-        description: 'LastLook Data — historical daily closing prices for a major US equity index.',
-        mimeType: 'application/json',
-        extensions: {
-          ...declareDiscoveryExtension({
-            input: { symbol: 'SPX', days: '30' },
-            inputSchema: {
-              properties: {
-                symbol: { type: 'string', description: 'SPX, NDX, DJIA, RUT, or VIX' },
-                days: { type: 'string', description: '30, 90, or 365' },
-              },
-              required: ['symbol', 'days'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                symbol: 'SPX',
-                label: 'S&P 500',
-                days: 30,
-                count: 21,
-                start: '2026-04-10',
-                end: '2026-05-09',
-                observations: [{ date: '2026-04-10', value: 5201.44 }, { date: '2026-05-09', value: 5248.32 }],
-                note: 'Source: Yahoo Finance',
-              },
-            },
-          }),
-        },
-      },
     },
     server,
   )
@@ -359,36 +295,6 @@ async function fetchFXSeries(pair, days) {
   return observations;
 }
 
-// ── Equity helpers ────────────────────────────────────────────────────────────
-
-async function fetchEquityCurrent(symbol) {
-  const cacheKey = `equity_current_${symbol}`;
-  const cached = cache.get(cacheKey);
-  if (cached) return cached;
-  const quote = await yahooFinance.quote(EQUITY_YAHOO_SYMBOLS[symbol]);
-  const result = {
-    symbol, label: EQUITY_LABELS[symbol],
-    price: quote.regularMarketPrice,
-    change: quote.regularMarketChange,
-    change_percent: quote.regularMarketChangePercent,
-    market_time: new Date(quote.regularMarketTime * 1000).toISOString().slice(0, 10),
-  };
-  cache.set(cacheKey, result, 900);
-  return result;
-}
-
-async function fetchEquitySeries(symbol, days) {
-  const cacheKey = `equity_series_${symbol}_${days}`;
-  const cached = cache.get(cacheKey);
-  if (cached) return cached;
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
-  const result = await yahooFinance.historical(EQUITY_YAHOO_SYMBOLS[symbol], { period1: startDate, period2: new Date(), interval: '1d' });
-  const observations = result.map(d => ({ date: d.date.toISOString().slice(0, 10), value: parseFloat(d.close.toFixed(2)) }));
-  cache.set(cacheKey, observations, 3600);
-  return observations;
-}
-
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function daysAgoISO(days) {
@@ -406,8 +312,8 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.5.1',
-    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, equity indices.',
+    version: '2.6.0',
+    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates. Pay per query via x402, no accounts or API keys required.',
     website: 'https://www.lastlookdata.com',
     payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
     common_use_cases: {
@@ -418,21 +324,24 @@ app.get('/', (req, res) => {
       'Current 30-yr Treasury yield':'GET /api/treasury/current',
       'Current CPI (inflation)':     'GET /api/series/30?id=CPIAUCSL',
       'Current unemployment rate':   'GET /api/series/30?id=UNRATE',
+      'Current WTI crude oil price': 'GET /api/series/30?id=DCOILWTICO',
+      'Current Brent crude price':   'GET /api/series/30?id=DCOILBRENTEU',
+      'Current natural gas price':   'GET /api/series/30?id=DHHNGSP',
+      'Current gasoline price':      'GET /api/series/30?id=GASREGCOVW',
       'Current EUR/USD rate':        'GET /api/fx/current?pair=EURUSD',
-      'Current S&P 500 level':       'GET /api/equity/current?symbol=SPX',
     },
     supported_series: {
       treasury:        ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
       mortgage_housing:['MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST'],
       benchmark_rates: ['FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3'],
       macro:           ['CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP'],
+      energy:          ['DCOILWTICO', 'DCOILBRENTEU', 'GASREGCOVW', 'DHHNGSP'],
     },
-    supported_fx:      [...ALLOWED_FX],
-    supported_equities:[...ALLOWED_EQUITIES],
+    supported_fx: [...ALLOWED_FX],
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.5.1' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.6.0' }));
 
 app.get('/api/treasury/public', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -443,7 +352,7 @@ app.get('/api/treasury/public', async (req, res) => {
     const latest = obs.filter(o => o.value !== '.').slice(-1)[0];
     if (!latest) return res.status(404).json({ error: 'No data available' });
     res.json({ date: latest.date, yield_percent: parseFloat(latest.value), series: 'DGS30' });
-  } catch { res.status(500).json({ error: 'Failed to fetch data' }); }
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch data', detail: err.message }); }
 });
 
 app.get('/api/treasury/current', async (req, res) => {
@@ -454,7 +363,7 @@ app.get('/api/treasury/current', async (req, res) => {
     const latest = obs.filter(o => o.value !== '.').slice(-1)[0];
     if (!latest) return res.status(404).json({ error: 'No data available' });
     res.json({ service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: latest.date, yield_percent: parseFloat(latest.value), note: 'Source: Federal Reserve Bank of St. Louis (FRED)' });
-  } catch { res.status(500).json({ error: 'Failed to fetch data' }); }
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch data', detail: err.message }); }
 });
 
 app.get('/api/treasury/date', async (req, res) => {
@@ -465,7 +374,7 @@ app.get('/api/treasury/date', async (req, res) => {
     const match = obs.find(o => o.value !== '.');
     if (!match) return res.status(404).json({ error: `No yield data for ${d}. FRED only publishes on business days.` });
     res.json({ service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: match.date, yield_percent: parseFloat(match.value), note: 'Source: Federal Reserve Bank of St. Louis (FRED)' });
-  } catch { res.status(500).json({ error: 'Failed to fetch data' }); }
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch data', detail: err.message }); }
 });
 
 function seriesHandler(days) {
@@ -475,12 +384,12 @@ function seriesHandler(days) {
       if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({
         error: `Unknown series "${seriesId}".`,
         supported_series: [...ALLOWED_SERIES],
-        common_examples: 'MORTGAGE30US, MORTGAGE15US, FEDFUNDS, DGS10, CPIAUCSL',
+        common_examples: 'MORTGAGE30US, FEDFUNDS, DGS10, CPIAUCSL, DCOILWTICO',
       });
       const obs = await fetchFredSeries(seriesId, daysAgoISO(days), todayISO());
       if (!obs.length) return res.status(404).json({ error: `No data returned for ${seriesId}` });
       res.json({ service: 'LastLook Data', series_id: seriesId, days, count: obs.length, start: obs[0].date, end: obs[obs.length-1].date, observations: obs, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' });
-    } catch { res.status(500).json({ error: 'Failed to fetch data' }); }
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch data', detail: err.message }); }
   };
 }
 
@@ -494,7 +403,7 @@ app.get('/api/fx/current', async (req, res) => {
     if (!ALLOWED_FX.has(pair)) return res.status(400).json({ error: `Unknown pair "${pair}".`, supported_pairs: [...ALLOWED_FX] });
     const data = await fetchFXCurrent(pair);
     res.json({ service: 'LastLook Data', pair, label: FX_LABELS[pair], date: data.date, rate: data.rate, base: data.base, quote: data.quote, note: 'Source: Frankfurter (European Central Bank)' });
-  } catch { res.status(500).json({ error: 'Failed to fetch FX data' }); }
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch FX data', detail: err.message }); }
 });
 
 app.get('/api/fx/series', async (req, res) => {
@@ -506,28 +415,7 @@ app.get('/api/fx/series', async (req, res) => {
     const obs = await fetchFXSeries(pair, days);
     if (!obs.length) return res.status(404).json({ error: `No data returned for ${pair}` });
     res.json({ service: 'LastLook Data', pair, label: FX_LABELS[pair], days, count: obs.length, start: obs[0].date, end: obs[obs.length-1].date, observations: obs, note: 'Source: Frankfurter (European Central Bank)' });
-  } catch { res.status(500).json({ error: 'Failed to fetch FX data' }); }
-});
-
-app.get('/api/equity/current', async (req, res) => {
-  try {
-    const symbol = (req.query.symbol || '').toUpperCase();
-    if (!ALLOWED_EQUITIES.has(symbol)) return res.status(400).json({ error: `Unknown symbol "${symbol}".`, supported_symbols: [...ALLOWED_EQUITIES] });
-    const data = await fetchEquityCurrent(symbol);
-    res.json({ service: 'LastLook Data', ...data, note: 'Source: Yahoo Finance' });
-  } catch { res.status(500).json({ error: 'Failed to fetch equity data' }); }
-});
-
-app.get('/api/equity/series', async (req, res) => {
-  try {
-    const symbol = (req.query.symbol || '').toUpperCase();
-    const days = parseInt(req.query.days, 10) || 30;
-    if (!ALLOWED_EQUITIES.has(symbol)) return res.status(400).json({ error: `Unknown symbol "${symbol}".`, supported_symbols: [...ALLOWED_EQUITIES] });
-    if (![30,90,365].includes(days)) return res.status(400).json({ error: 'days must be 30, 90, or 365' });
-    const obs = await fetchEquitySeries(symbol, days);
-    if (!obs.length) return res.status(404).json({ error: `No data returned for ${symbol}` });
-    res.json({ service: 'LastLook Data', symbol, label: EQUITY_LABELS[symbol], days, count: obs.length, start: obs[0].date, end: obs[obs.length-1].date, observations: obs, note: 'Source: Yahoo Finance' });
-  } catch { res.status(500).json({ error: 'Failed to fetch equity data' }); }
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch FX data', detail: err.message }); }
 });
 
 app.listen(PORT, () => console.log(`LastLook Data running on port ${PORT}`));
