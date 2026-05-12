@@ -59,7 +59,7 @@ app.use(
   paymentMiddleware(
     {
       'GET /api/treasury/current': {
-        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — current 30-year US Treasury yield (DGS30) from FRED',
         mimeType: 'application/json',
         extensions: {
@@ -78,7 +78,7 @@ app.use(
         },
       },
       'GET /api/treasury/date': {
-        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — 30-year US Treasury yield for a specific date (YYYY-MM-DD)',
         mimeType: 'application/json',
         extensions: {
@@ -101,7 +101,7 @@ app.use(
         },
       },
       'GET /api/series/30': {
-        accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates, Fed funds rate, IORB, EFFR, CPI, Treasury yields, energy prices, unemployment, and more.',
         mimeType: 'application/json',
         extensions: {
@@ -129,7 +129,7 @@ app.use(
         },
       },
       'GET /api/series/90': {
-        accepts: { scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — last 90 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
@@ -155,7 +155,7 @@ app.use(
         },
       },
       'GET /api/series/365': {
-        accepts: { scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — last 365 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
@@ -181,7 +181,7 @@ app.use(
         },
       },
       'GET /api/fx/current': {
-        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — current exchange rate for a G10 currency pair. Source: European Central Bank.',
         mimeType: 'application/json',
         extensions: {
@@ -207,7 +207,7 @@ app.use(
         },
       },
       'GET /api/fx/series': {
-        accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
         description: 'LastLook Data — historical daily exchange rates for a G10 currency pair.',
         mimeType: 'application/json',
         extensions: {
@@ -312,7 +312,7 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.6.1',
+    version: '2.6.2',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
@@ -342,7 +342,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.6.1' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.6.2' }));
 
 app.get('/api/treasury/public', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
