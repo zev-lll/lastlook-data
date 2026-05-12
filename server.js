@@ -4,11 +4,14 @@ const axios = require('axios');
 const NodeCache = require('node-cache');
 const yahooFinance = require('yahoo-finance2').default;
 
-// x402 v2 — exact pattern from Agentic Market scaffold
+// x402 v2 packages
 const { paymentMiddleware } = require('@x402/express');
 const { x402ResourceServer, HTTPFacilitatorClient } = require('@x402/core/server');
 const { registerExactEvmScheme } = require('@x402/evm/exact/server');
 const { bazaarResourceServerExtension, declareDiscoveryExtension } = require('@x402/extensions/bazaar');
+
+// CDP facilitator — reads CDP_API_KEY_ID + CDP_API_KEY_SECRET from env automatically
+const { facilitator: cdpFacilitator } = require('@coinbase/x402');
 
 const app = express();
 app.set('trust proxy', true);
@@ -19,12 +22,8 @@ const FRED_API_KEY = process.env.FRED_API_KEY;
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
 
 // ── x402 v2 setup ─────────────────────────────────────────────────────────────
-// No auth on HTTPFacilitatorClient — CDP reads CDP_API_KEY_ID + CDP_API_KEY_SECRET internally
 
-const facilitatorClient = new HTTPFacilitatorClient({
-  url: 'https://api.cdp.coinbase.com/platform/v2/x402/facilitator',
-});
-
+const facilitatorClient = new HTTPFacilitatorClient(cdpFacilitator);
 const server = new x402ResourceServer(facilitatorClient);
 registerExactEvmScheme(server);
 server.registerExtension(bazaarResourceServerExtension);
@@ -407,7 +406,7 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.5.0',
+    version: '2.5.1',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, equity indices.',
     website: 'https://www.lastlookdata.com',
     payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
@@ -433,7 +432,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.5.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.5.1' }));
 
 app.get('/api/treasury/public', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
