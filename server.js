@@ -4,11 +4,11 @@ const axios = require('axios');
 const NodeCache = require('node-cache');
 const yahooFinance = require('yahoo-finance2').default;
 
-// x402 with CDP facilitator — indexes into CDP Bazaar
-// Reads CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET from env automatically
-const { paymentMiddleware } = require('x402-express');
-const { facilitator } = require('@coinbase/x402');
-const { declareDiscoveryExtension } = require('@x402/extensions/bazaar');
+// x402 v2 — exact pattern from Agentic Market scaffold
+const { paymentMiddleware } = require('@x402/express');
+const { x402ResourceServer, HTTPFacilitatorClient } = require('@x402/core/server');
+const { registerExactEvmScheme } = require('@x402/evm/exact/server');
+const { bazaarResourceServerExtension, declareDiscoveryExtension } = require('@x402/extensions/bazaar');
 
 const app = express();
 app.set('trust proxy', true);
@@ -17,6 +17,17 @@ const cache = new NodeCache({ stdTTL: 3600 });
 const PORT = process.env.PORT || 8080;
 const FRED_API_KEY = process.env.FRED_API_KEY;
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
+
+// ── x402 v2 setup ─────────────────────────────────────────────────────────────
+// No auth on HTTPFacilitatorClient — CDP reads CDP_API_KEY_ID + CDP_API_KEY_SECRET internally
+
+const facilitatorClient = new HTTPFacilitatorClient({
+  url: 'https://api.cdp.coinbase.com/platform/v2/x402/facilitator',
+});
+
+const server = new x402ResourceServer(facilitatorClient);
+registerExactEvmScheme(server);
+server.registerExtension(bazaarResourceServerExtension);
 
 // ── Allowed symbols ───────────────────────────────────────────────────────────
 
@@ -51,15 +62,13 @@ const FX_LABELS = {
   USDNOK: 'US Dollar / Norwegian Krone',
 };
 
-// ── x402 payment middleware with CDP facilitator + Bazaar discovery ────────────
+// ── x402 payment middleware ───────────────────────────────────────────────────
 
 app.use(
   paymentMiddleware(
-    WALLET_ADDRESS,
     {
       'GET /api/treasury/current': {
-        price: '$0.01',
-        network: 'base',
+        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
         description: 'LastLook Data — current 30-year US Treasury yield (DGS30) from FRED',
         mimeType: 'application/json',
         extensions: {
@@ -78,8 +87,7 @@ app.use(
         },
       },
       'GET /api/treasury/date': {
-        price: '$0.01',
-        network: 'base',
+        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
         description: 'LastLook Data — 30-year US Treasury yield for a specific date (YYYY-MM-DD)',
         mimeType: 'application/json',
         extensions: {
@@ -102,19 +110,15 @@ app.use(
         },
       },
       'GET /api/series/30': {
-        price: '$0.05',
-        network: 'base',
-        description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates (?id=MORTGAGE30US or MORTGAGE15US), Fed funds rate (?id=FEDFUNDS), 10-yr Treasury (?id=DGS10), CPI (?id=CPIAUCSL), unemployment (?id=UNRATE), SOFR, GDP, and more.',
+        accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        description: 'LastLook Data — last 30 days of any FRED series. Use for current mortgage rates (?id=MORTGAGE30US or MORTGAGE15US), Fed funds rate (?id=FEDFUNDS), 10-yr Treasury (?id=DGS10), CPI (?id=CPIAUCSL), unemployment (?id=UNRATE), and more.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { id: 'MORTGAGE30US' },
             inputSchema: {
               properties: {
-                id: {
-                  type: 'string',
-                  description: 'FRED series ID. Examples: MORTGAGE30US (30-yr mortgage rate), MORTGAGE15US (15-yr mortgage rate), DGS10 (10-yr Treasury), FEDFUNDS (Fed funds rate), SOFR, CPIAUCSL (CPI/inflation), UNRATE (unemployment). Full list: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP',
-                },
+                id: { type: 'string', description: 'FRED series ID: MORTGAGE30US, MORTGAGE15US, DGS10, DGS30, FEDFUNDS, SOFR, CPIAUCSL, UNRATE, GDP, and more' },
               },
               required: ['id'],
             },
@@ -134,17 +138,14 @@ app.use(
         },
       },
       'GET /api/series/90': {
-        price: '$0.10',
-        network: 'base',
-        description: 'LastLook Data — last 90 days of any FRED series including mortgage rates, Treasury yields, Fed funds rate, CPI, SOFR, unemployment, GDP, and more.',
+        accepts: { scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        description: 'LastLook Data — last 90 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { id: 'DGS30' },
             inputSchema: {
-              properties: {
-                id: { type: 'string', description: 'FRED series ID: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP' },
-              },
+              properties: { id: { type: 'string', description: 'FRED series ID' } },
               required: ['id'],
             },
             output: {
@@ -163,17 +164,14 @@ app.use(
         },
       },
       'GET /api/series/365': {
-        price: '$0.25',
-        network: 'base',
-        description: 'LastLook Data — last 365 days of any FRED series including mortgage rates, Treasury yields, Fed funds rate, CPI, SOFR, unemployment, GDP, and more.',
+        accepts: { scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        description: 'LastLook Data — last 365 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { id: 'DGS30' },
             inputSchema: {
-              properties: {
-                id: { type: 'string', description: 'FRED series ID: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, CPIAUCSL, CPILFESL, UNRATE, GDP' },
-              },
+              properties: { id: { type: 'string', description: 'FRED series ID' } },
               required: ['id'],
             },
             output: {
@@ -192,17 +190,14 @@ app.use(
         },
       },
       'GET /api/fx/current': {
-        price: '$0.01',
-        network: 'base',
+        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
         description: 'LastLook Data — current exchange rate for a G10 currency pair. Source: European Central Bank.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { pair: 'EURUSD' },
             inputSchema: {
-              properties: {
-                pair: { type: 'string', description: 'G10 currency pair: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK' },
-              },
+              properties: { pair: { type: 'string', description: 'G10 pair: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK' } },
               required: ['pair'],
             },
             output: {
@@ -221,17 +216,16 @@ app.use(
         },
       },
       'GET /api/fx/series': {
-        price: '$0.05',
-        network: 'base',
-        description: 'LastLook Data — historical daily exchange rates for a G10 currency pair. Source: European Central Bank.',
+        accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        description: 'LastLook Data — historical daily exchange rates for a G10 currency pair.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { pair: 'EURUSD', days: '30' },
             inputSchema: {
               properties: {
-                pair: { type: 'string', description: 'G10 currency pair: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK' },
-                days: { type: 'string', description: 'History window: 30, 90, or 365' },
+                pair: { type: 'string', description: 'G10 currency pair' },
+                days: { type: 'string', description: '30, 90, or 365' },
               },
               required: ['pair', 'days'],
             },
@@ -252,17 +246,14 @@ app.use(
         },
       },
       'GET /api/equity/current': {
-        price: '$0.01',
-        network: 'base',
-        description: 'LastLook Data — current price for a major US equity index: SPX (S&P 500), NDX (NASDAQ 100), DJIA (Dow Jones), RUT (Russell 2000), VIX (Volatility Index).',
+        accepts: { scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS },
+        description: 'LastLook Data — current price for a major US equity index: SPX, NDX, DJIA, RUT, VIX.',
         mimeType: 'application/json',
         extensions: {
           ...declareDiscoveryExtension({
             input: { symbol: 'SPX' },
             inputSchema: {
-              properties: {
-                symbol: { type: 'string', description: 'Index symbol: SPX (S&P 500), NDX (NASDAQ 100), DJIA (Dow Jones), RUT (Russell 2000), VIX (Volatility Index)' },
-              },
+              properties: { symbol: { type: 'string', description: 'SPX, NDX, DJIA, RUT, or VIX' } },
               required: ['symbol'],
             },
             output: {
@@ -281,8 +272,7 @@ app.use(
         },
       },
       'GET /api/equity/series': {
-        price: '$0.05',
-        network: 'base',
+        accepts: { scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS },
         description: 'LastLook Data — historical daily closing prices for a major US equity index.',
         mimeType: 'application/json',
         extensions: {
@@ -290,8 +280,8 @@ app.use(
             input: { symbol: 'SPX', days: '30' },
             inputSchema: {
               properties: {
-                symbol: { type: 'string', description: 'Index symbol: SPX, NDX, DJIA, RUT, or VIX' },
-                days: { type: 'string', description: 'History window: 30, 90, or 365' },
+                symbol: { type: 'string', description: 'SPX, NDX, DJIA, RUT, or VIX' },
+                days: { type: 'string', description: '30, 90, or 365' },
               },
               required: ['symbol', 'days'],
             },
@@ -312,7 +302,7 @@ app.use(
         },
       },
     },
-    facilitator,
+    server,
   )
 );
 
@@ -417,10 +407,10 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.3.0',
-    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, equity indices. Pay per query via x402, no accounts or API keys required.',
+    version: '2.5.0',
+    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, equity indices.',
     website: 'https://www.lastlookdata.com',
-    payment: 'x402 protocol, USDC on Base mainnet',
+    payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
     common_use_cases: {
       'Current 30-yr mortgage rate': 'GET /api/series/30?id=MORTGAGE30US',
       'Current 15-yr mortgage rate': 'GET /api/series/30?id=MORTGAGE15US',
@@ -443,7 +433,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.3.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.5.0' }));
 
 app.get('/api/treasury/public', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -486,7 +476,7 @@ function seriesHandler(days) {
       if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({
         error: `Unknown series "${seriesId}".`,
         supported_series: [...ALLOWED_SERIES],
-        common_examples: 'MORTGAGE30US (30-yr mortgage), MORTGAGE15US (15-yr mortgage), FEDFUNDS (Fed funds rate), DGS10 (10-yr Treasury), CPIAUCSL (CPI)',
+        common_examples: 'MORTGAGE30US, MORTGAGE15US, FEDFUNDS, DGS10, CPIAUCSL',
       });
       const obs = await fetchFredSeries(seriesId, daysAgoISO(days), todayISO());
       if (!obs.length) return res.status(404).json({ error: `No data returned for ${seriesId}` });
