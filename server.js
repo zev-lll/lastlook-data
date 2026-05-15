@@ -11,6 +11,7 @@ const { bazaarResourceServerExtension, declareDiscoveryExtension } = require('@x
 const { facilitator: cdpFacilitator } = require('@coinbase/x402');
 
 const app = express();
+app.disable('x-powered-by');
 app.set('trust proxy', true);
 const cache = new NodeCache({ stdTTL: 3600 });
 
@@ -73,6 +74,19 @@ const FX_LABELS = {
   NZDUSD: 'New Zealand Dollar / US Dollar', USDSEK: 'US Dollar / Swedish Krona',
   USDNOK: 'US Dollar / Norwegian Krone',
 };
+
+// ── HEAD → 402 for paid endpoints ────────────────────────────────────────────
+
+const PAID_PATHS = [
+  '/api/current', '/api/date',
+  '/api/series/30', '/api/series/90', '/api/series/365',
+  '/api/treasury/current', '/api/treasury/date',
+  '/api/fx/current', '/api/fx/date', '/api/fx/series',
+];
+app.use((req, res, next) => {
+  if (req.method === 'HEAD' && PAID_PATHS.includes(req.path)) return res.status(402).end();
+  next();
+});
 
 // ── x402 payment middleware ───────────────────────────────────────────────────
 
