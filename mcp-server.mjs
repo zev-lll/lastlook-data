@@ -7,8 +7,8 @@ import express from 'express';
 
 const server = new McpServer({
   name: 'lastlook-data',
-  version: '2.6.1',
-  description: 'LastLook Data — financial market data for AI agents. FRED macro data, G10 FX rates, and energy prices. Pay per query via x402.'
+  version: '2.7.0',
+  description: 'LastLook Data — financial market data for AI agents. FRED macro data (Treasury yields, mortgage rates, benchmark rates, CPI, IORB, EFFR, energy prices), G10 FX rates. Pay per query via x402.'
 });
 
 const SERIES_LABELS = {
@@ -235,7 +235,7 @@ if (isHTTP) {
     await transport.handleRequest(req, res);
   });
 
-  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.6.1' }));
+  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.7.0' }));
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`LastLook Data MCP server running on port ${PORT}`));

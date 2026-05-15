@@ -89,7 +89,7 @@ app.use(
             input: { id: 'IORB' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID: DGS30, DGS10, DGS5, DGS2, DGS1MO, MORTGAGE30US, MORTGAGE15US, MSPUS, HOUST, FEDFUNDS, SOFR, DPRIME, DTB3, IORB, EFFR, CPIAUCSL, CPILFESL, UNRATE, GDP, DCOILWTICO, DCOILBRENTEU, GASREGCOVW, DHHNGSP' },
+                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
               },
               required: ['id'],
             },
@@ -117,7 +117,7 @@ app.use(
             input: { id: 'DGS10', d: '2026-05-09' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID' },
+                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
                 d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
               },
               required: ['id', 'd'],
@@ -146,7 +146,7 @@ app.use(
             input: { id: 'MORTGAGE30US' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID' },
+                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
               },
               required: ['id'],
             },
@@ -175,7 +175,7 @@ app.use(
           ...declareDiscoveryExtension({
             input: { id: 'DGS30' },
             inputSchema: {
-              properties: { id: { type: 'string', description: 'FRED series ID' } },
+              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
               required: ['id'],
             },
             output: {
@@ -203,7 +203,7 @@ app.use(
           ...declareDiscoveryExtension({
             input: { id: 'DGS30' },
             inputSchema: {
-              properties: { id: { type: 'string', description: 'FRED series ID' } },
+              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
               required: ['id'],
             },
             output: {
@@ -276,7 +276,7 @@ app.use(
           ...declareDiscoveryExtension({
             input: { pair: 'EURUSD' },
             inputSchema: {
-              properties: { pair: { type: 'string', description: 'G10 pair: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK' } },
+              properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] } },
               required: ['pair'],
             },
             output: {
@@ -305,7 +305,7 @@ app.use(
             input: { pair: 'EURUSD', d: '2026-05-09' },
             inputSchema: {
               properties: {
-                pair: { type: 'string', description: 'G10 currency pair' },
+                pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
                 d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
               },
               required: ['pair', 'd'],
@@ -336,8 +336,8 @@ app.use(
             input: { pair: 'EURUSD', days: '30' },
             inputSchema: {
               properties: {
-                pair: { type: 'string', description: 'G10 currency pair' },
-                days: { type: 'string', description: '30, 90, or 365' },
+                pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
+                days: { type: 'string', description: '30, 90, or 365 days of history', enum: ['30','90','365'] },
               },
               required: ['pair', 'days'],
             },
