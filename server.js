@@ -503,10 +503,12 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.7.0' }));
 
+app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
+
 app.get('/.well-known/x402.json', (req, res) => res.json({
   name: 'LastLook Data',
   description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators. Pay per query via x402. No API keys or accounts required.',
-  logo_url: 'https://www.lastlookdata.com/logo.png',
+  logo_url: 'https://api.lastlookdata.com/logo.png',
   url: 'https://www.lastlookdata.com',
   website: 'https://www.lastlookdata.com',
   docs: 'https://www.lastlookdata.com/docs',
