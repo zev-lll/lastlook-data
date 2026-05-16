@@ -506,11 +506,12 @@ app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Dat
 app.get('/.well-known/x402.json', (req, res) => res.json({
   name: 'LastLook Data',
   description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators. Pay per query via x402. No API keys or accounts required.',
-  logo_url: 'https://www.lastlookdata.com/favicon.ico',
-  url: 'https://api.lastlookdata.com',
+  logo_url: 'https://www.lastlookdata.com/logo.png',
+  url: 'https://www.lastlookdata.com',
   website: 'https://www.lastlookdata.com',
   docs: 'https://www.lastlookdata.com/docs',
   category: 'finance',
+  version: '1.0',
   payment: { protocol: 'x402', network: 'eip155:8453', asset: 'USDC' },
 }));
 
