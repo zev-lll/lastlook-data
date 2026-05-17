@@ -107,7 +107,7 @@ app.use(
             input: { id: 'IORB' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
+                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
               },
               required: ['id'],
             },
@@ -135,7 +135,7 @@ app.use(
             input: { id: 'DGS10', d: '2026-05-09' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
+                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
                 d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
               },
               required: ['id', 'd'],
@@ -164,7 +164,7 @@ app.use(
             input: { id: 'MORTGAGE30US' },
             inputSchema: {
               properties: {
-                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
+                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
               },
               required: ['id'],
             },
@@ -193,7 +193,7 @@ app.use(
           ...declareDiscoveryExtension({
             input: { id: 'DGS30' },
             inputSchema: {
-              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
+              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
               required: ['id'],
             },
             output: {
@@ -221,7 +221,7 @@ app.use(
           ...declareDiscoveryExtension({
             input: { id: 'DGS30' },
             inputSchema: {
-              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
+              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
               required: ['id'],
             },
             output: {
