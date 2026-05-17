@@ -514,6 +514,8 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
   docs: 'https://www.lastlookdata.com/docs',
   category: 'finance',
   version: '1.0',
+  base_url: 'https://api.lastlookdata.com',
+  content_type: 'application/json',
   payment: { protocol: 'x402', network: 'eip155:8453', asset: 'USDC' },
   resources: [
     {
