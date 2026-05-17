@@ -5,6 +5,7 @@ import { z } from 'zod';
 import axios from 'axios';
 import express from 'express';
 
+function createMcpServer() {
 const server = new McpServer({
   name: 'lastlook-data',
   version: '2.8.3',
@@ -591,6 +592,9 @@ server.registerTool(
   }
 );
 
+  return server;
+}
+
 // ── Transport ─────────────────────────────────────────────────────────────────
 const isHTTP = process.env.MCP_TRANSPORT === 'http';
 
@@ -599,6 +603,7 @@ if (isHTTP) {
   app.use(express.json());
 
   app.post('/mcp', async (req, res) => {
+    const server = createMcpServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => transport.close());
     await server.connect(transport);
@@ -606,6 +611,7 @@ if (isHTTP) {
   });
 
   app.get('/mcp', async (req, res) => {
+    const server = createMcpServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => transport.close());
     await server.connect(transport);
@@ -617,6 +623,7 @@ if (isHTTP) {
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`LastLook Data MCP server running on port ${PORT}`));
 } else {
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
