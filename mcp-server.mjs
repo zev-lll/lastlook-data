@@ -7,7 +7,7 @@ import express from 'express';
 
 const server = new McpServer({
   name: 'lastlook-data',
-  version: '2.7.0',
+  version: '2.8.3',
   description: 'LastLook Data — financial market data for AI agents. FRED macro data (Treasury yields, mortgage rates, benchmark rates, CPI, IORB, EFFR, energy prices), G10 FX rates. Pay per query via x402.'
 });
 
