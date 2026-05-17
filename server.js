@@ -544,7 +544,7 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.7.0',
+    version: '2.8.2',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -588,7 +588,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.7.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.8.2' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
@@ -615,6 +615,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Most recent value for any supported FRED series. Use ?id= with DGS10, MORTGAGE30US, FEDFUNDS, IORB, EFFR, CPIAUCSL, UNRATE, DCOILWTICO, etc.',
       price: '0.01',
       currency: 'USDC',
+      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
@@ -624,6 +625,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'FRED series value for a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.',
       price: '0.01',
       currency: 'USDC',
+      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: {
         id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] },
         d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
@@ -636,6 +638,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Last 30 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
       price: '0.05',
       currency: 'USDC',
+      pricing: { amount: '0.05', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
@@ -645,6 +648,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Last 90 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
       price: '0.10',
       currency: 'USDC',
+      pricing: { amount: '0.10', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
@@ -654,6 +658,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Last 365 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
       price: '0.25',
       currency: 'USDC',
+      pricing: { amount: '0.25', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
@@ -663,6 +668,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Current exchange rate for any G10 currency pair. Use ?pair=EURUSD, USDJPY, GBPUSD, etc. Source: ECB.',
       price: '0.01',
       currency: 'USDC',
+      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] } },
     },
     {
@@ -672,6 +678,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'G10 exchange rate for a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD. Source: ECB.',
       price: '0.01',
       currency: 'USDC',
+      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: {
         pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
         d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
@@ -684,6 +691,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Historical daily exchange rates for a G10 currency pair. Use ?pair=EURUSD&days=30|90|365. Source: ECB.',
       price: '0.05',
       currency: 'USDC',
+      pricing: { amount: '0.05', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: {
         pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
         days: { type: 'string', description: 'History window', enum: ['30','90','365'] },
@@ -696,6 +704,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Most recent 30-year US Treasury constant maturity yield (DGS30). Source: FRED.',
       price: '0.01',
       currency: 'USDC',
+      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
     },
     {
       name: '30-Year Treasury Yield — By Date',
@@ -704,6 +713,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: '30-year US Treasury yield for a specific date. Use ?d=YYYY-MM-DD.',
       price: '0.01',
       currency: 'USDC',
+      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } },
     },
     {
@@ -713,6 +723,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: '2s10s and 3m10y Treasury yield curve spreads with inversion signal. Computed from FRED data.',
       price: '0.03',
       currency: 'USDC',
+      pricing: { amount: '0.03', currency: 'USDC', network: 'Base', scheme: 'exact' },
     },
     {
       name: 'Sahm Rule Recession Indicator',
@@ -721,6 +732,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Real-time Sahm Rule recession indicator. Value >= 0.50 signals recession underway. Source: FRED SAHMREALTIME.',
       price: '0.02',
       currency: 'USDC',
+      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
     },
     {
       name: 'Fed Policy Spread (EFFR vs IORB)',
@@ -729,6 +741,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Effective Fed funds rate vs interest on reserves spread, with interpretation. Source: FRED.',
       price: '0.02',
       currency: 'USDC',
+      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
     },
     {
       name: 'Economic Calendar',
@@ -737,6 +750,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
       description: 'Upcoming FRED economic data release dates — CPI, jobs, GDP, Treasury rates, and more. Use ?days=30|60|90.',
       price: '0.02',
       currency: 'USDC',
+      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { days: { type: 'string', description: 'Lookahead window', enum: ['30','60','90'] } },
     },
   ],
