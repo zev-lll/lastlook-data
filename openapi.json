@@ -1,0 +1,722 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "LastLook Data API",
+    "version": "2.8.0",
+    "description": "Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, energy prices, macro indicators, yield curve spreads, recession signals, and economic calendar data. Pay per query via x402 protocol. No API keys or accounts required.",
+    "contact": {
+      "name": "LastLook Data",
+      "url": "https://www.lastlookdata.com",
+      "email": "hello@lastlookdata.com"
+    },
+    "termsOfService": "https://www.lastlookdata.com/terms",
+    "x-x402": {
+      "protocol": "x402-v2",
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "payTo": "0xB4848d1b4b7E31B75b9b30d717F89777dC65D68e",
+      "docs": "https://www.lastlookdata.com/docs"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.lastlookdata.com",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    { "name": "FRED", "description": "Federal Reserve Economic Data — raw series" },
+    { "name": "FX", "description": "G10 FX rates via European Central Bank" },
+    { "name": "Derived", "description": "Computed and interpreted market signals" },
+    { "name": "Calendar", "description": "Economic data release schedule" },
+    { "name": "Free", "description": "No payment required" }
+  ],
+  "paths": {
+    "/api/current": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "Current value for any FRED series",
+        "description": "Returns the most recent observation for any supported FRED series. Common use cases: mortgage rates (?id=MORTGAGE30US), Fed funds rate (?id=FEDFUNDS), 10yr Treasury (?id=DGS10), CPI (?id=CPIAUCSL), unemployment (?id=UNRATE), WTI crude (?id=DCOILWTICO).",
+        "operationId": "getFredCurrent",
+        "x-x402": { "price": "0.01", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "description": "FRED series ID",
+            "schema": {
+              "type": "string",
+              "enum": ["DGS30","DGS10","DGS5","DGS2","DGS1MO","MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST","FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR","CPIAUCSL","CPILFESL","UNRATE","GDP","DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP","SAHMREALTIME"],
+              "example": "MORTGAGE30US"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current value",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FredCurrentResponse" },
+                "example": {
+                  "service": "LastLook Data",
+                  "series_id": "MORTGAGE30US",
+                  "label": "30-Year Fixed Rate Mortgage Average",
+                  "date": "2026-05-15",
+                  "value": 6.86,
+                  "note": "Source: Federal Reserve Bank of St. Louis (FRED)"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/date": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "FRED series value on a specific date",
+        "description": "Returns the value for any supported FRED series on a specific business day.",
+        "operationId": "getFredByDate",
+        "x-x402": { "price": "0.01", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "description": "FRED series ID",
+            "schema": {
+              "type": "string",
+              "enum": ["DGS30","DGS10","DGS5","DGS2","DGS1MO","MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST","FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR","CPIAUCSL","CPILFESL","UNRATE","GDP","DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP","SAHMREALTIME"]
+            }
+          },
+          {
+            "name": "d",
+            "in": "query",
+            "required": true,
+            "description": "Date in YYYY-MM-DD format (business days only)",
+            "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "example": "2026-05-09" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Value on the requested date",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FredCurrentResponse" }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/series/30": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "Last 30 days of observations",
+        "description": "Returns up to 30 days of observations for any supported FRED series.",
+        "operationId": "getFredSeries30",
+        "x-x402": { "price": "0.05", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "description": "FRED series ID",
+            "schema": {
+              "type": "string",
+              "enum": ["DGS30","DGS10","DGS5","DGS2","DGS1MO","MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST","FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR","CPIAUCSL","CPILFESL","UNRATE","GDP","DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP","SAHMREALTIME"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "30-day observation array",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FredSeriesResponse" }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/series/90": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "Last 90 days of observations",
+        "description": "Returns up to 90 days of observations for any supported FRED series.",
+        "operationId": "getFredSeries90",
+        "x-x402": { "price": "0.10", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["DGS30","DGS10","DGS5","DGS2","DGS1MO","MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST","FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR","CPIAUCSL","CPILFESL","UNRATE","GDP","DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP","SAHMREALTIME"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "90-day observation array", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FredSeriesResponse" } } } },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/series/365": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "Last 365 days of observations",
+        "description": "Returns up to 365 days of observations for any supported FRED series.",
+        "operationId": "getFredSeries365",
+        "x-x402": { "price": "0.25", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["DGS30","DGS10","DGS5","DGS2","DGS1MO","MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST","FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR","CPIAUCSL","CPILFESL","UNRATE","GDP","DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP","SAHMREALTIME"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "365-day observation array", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FredSeriesResponse" } } } },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/fx/current": {
+      "get": {
+        "tags": ["FX"],
+        "summary": "Current G10 FX rate",
+        "description": "Returns the current exchange rate for any G10 currency pair. Source: European Central Bank via Frankfurter.",
+        "operationId": "getFxCurrent",
+        "x-x402": { "price": "0.01", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "query",
+            "required": true,
+            "description": "G10 currency pair",
+            "schema": {
+              "type": "string",
+              "enum": ["EURUSD","GBPUSD","USDJPY","USDCHF","USDCAD","AUDUSD","NZDUSD","USDSEK","USDNOK"],
+              "example": "EURUSD"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current FX rate",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FxCurrentResponse" },
+                "example": {
+                  "service": "LastLook Data",
+                  "pair": "EURUSD",
+                  "label": "Euro / US Dollar",
+                  "date": "2026-05-15",
+                  "rate": 1.1245,
+                  "base": "EUR",
+                  "quote": "USD",
+                  "note": "Source: Frankfurter (European Central Bank)"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/fx/date": {
+      "get": {
+        "tags": ["FX"],
+        "summary": "G10 FX rate on a specific date",
+        "description": "Returns the exchange rate for a G10 currency pair on a specific business day. Source: ECB.",
+        "operationId": "getFxByDate",
+        "x-x402": { "price": "0.01", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["EURUSD","GBPUSD","USDJPY","USDCHF","USDCAD","AUDUSD","NZDUSD","USDSEK","USDNOK"] }
+          },
+          {
+            "name": "d",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "example": "2026-05-09" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "FX rate on date", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FxCurrentResponse" } } } },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/fx/series": {
+      "get": {
+        "tags": ["FX"],
+        "summary": "Historical G10 FX rate series",
+        "description": "Returns historical daily exchange rates for a G10 currency pair. Source: ECB.",
+        "operationId": "getFxSeries",
+        "x-x402": { "price": "0.05 / 0.10 / 0.25", "currency": "USDC", "note": "Price depends on ?days parameter" },
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["EURUSD","GBPUSD","USDJPY","USDCHF","USDCAD","AUDUSD","NZDUSD","USDSEK","USDNOK"] }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": true,
+            "description": "History window: 30 ($0.05), 90 ($0.10), 365 ($0.25)",
+            "schema": { "type": "string", "enum": ["30","90","365"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historical FX rate series",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FxSeriesResponse" }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/derived/yield-curve": {
+      "get": {
+        "tags": ["Derived"],
+        "summary": "Yield curve spreads with inversion signal",
+        "description": "Computes 2s10s (10Y minus 2Y Treasury) and 3m10y (10Y minus 3-Month T-Bill) yield curve spreads in real time. Returns an inversion signal for each spread and an overall curve status. No parameters required.",
+        "operationId": "getYieldCurve",
+        "x-x402": { "price": "0.03", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Yield curve spreads",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/YieldCurveResponse" },
+                "example": {
+                  "service": "LastLook Data",
+                  "as_of": "2026-05-15",
+                  "spreads": {
+                    "2s10s": { "value": -0.15, "label": "10Y minus 2Y Treasury", "inverted": true },
+                    "3m10y": { "value": 0.42, "label": "10Y minus 3-Month T-Bill", "inverted": false }
+                  },
+                  "components": { "DGS1MO": 4.28, "DGS2": 4.85, "DGS10": 4.70 },
+                  "signal": "Partially inverted",
+                  "note": "Source: Federal Reserve Bank of St. Louis (FRED)"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/derived/recession": {
+      "get": {
+        "tags": ["Derived"],
+        "summary": "Sahm Rule recession indicator",
+        "description": "Returns the real-time Sahm Rule recession indicator (SAHMREALTIME from FRED). A value >= 0.50 indicates a recession is likely underway. No parameters required.",
+        "operationId": "getRecessionIndicator",
+        "x-x402": { "price": "0.02", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Sahm Rule indicator",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RecessionResponse" },
+                "example": {
+                  "service": "LastLook Data",
+                  "as_of": "2026-04-01",
+                  "sahm_rule": {
+                    "value": 0.37,
+                    "threshold": 0.50,
+                    "triggered": false,
+                    "signal": "No recession signal"
+                  },
+                  "note": "Sahm Rule: value >= 0.50 indicates recession likely underway. Source: FRED (SAHMREALTIME)"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/derived/policy-spread": {
+      "get": {
+        "tags": ["Derived"],
+        "summary": "Fed policy spread (EFFR vs IORB)",
+        "description": "Returns the spread between the Effective Federal Funds Rate (EFFR) and Interest on Reserve Balances (IORB), with plain-English interpretation. No parameters required.",
+        "operationId": "getPolicySpread",
+        "x-x402": { "price": "0.02", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Policy spread",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PolicySpreadResponse" },
+                "example": {
+                  "service": "LastLook Data",
+                  "as_of": "2026-05-14",
+                  "effr": 4.33,
+                  "iorb": 4.40,
+                  "spread": -0.07,
+                  "interpretation": "EFFR trading below IORB — within normal operating band",
+                  "note": "Source: Federal Reserve Bank of St. Louis (FRED)"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/calendar": {
+      "get": {
+        "tags": ["Calendar"],
+        "summary": "Upcoming economic data release dates",
+        "description": "Returns upcoming FRED economic data release dates within the specified lookahead window. Covers CPI, employment, GDP, Treasury rates, and all other FRED-published series.",
+        "operationId": "getCalendar",
+        "x-x402": { "price": "0.02", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Lookahead window in days (default: 30)",
+            "schema": { "type": "integer", "enum": [30, 60, 90], "default": 30 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upcoming release dates",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CalendarResponse" },
+                "example": {
+                  "service": "LastLook Data",
+                  "calendar_start": "2026-05-16",
+                  "calendar_end": "2026-06-15",
+                  "count": 14,
+                  "releases": [
+                    { "date": "2026-05-20", "release_id": 50, "release_name": "Employment Situation" },
+                    { "date": "2026-05-28", "release_id": 53, "release_name": "Gross Domestic Product" }
+                  ],
+                  "note": "Source: Federal Reserve Bank of St. Louis (FRED) release calendar"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/treasury/current": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "Current 30-year Treasury yield",
+        "description": "Returns the most recent 30-year US Treasury constant maturity yield (DGS30). Legacy alias for /api/current?id=DGS30.",
+        "operationId": "getTreasuryCurrent",
+        "x-x402": { "price": "0.01", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Current 30yr yield",
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "LastLook Data",
+                  "series": "DGS30 - 30-Year Treasury Constant Maturity Rate",
+                  "date": "2026-05-15",
+                  "yield_percent": 4.92,
+                  "note": "Source: Federal Reserve Bank of St. Louis (FRED)"
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/treasury/date": {
+      "get": {
+        "tags": ["FRED"],
+        "summary": "30-year Treasury yield on a specific date",
+        "description": "Returns the 30-year Treasury yield on a specific business day. Legacy alias for /api/date?id=DGS30&d=DATE.",
+        "operationId": "getTreasuryByDate",
+        "x-x402": { "price": "0.01", "currency": "USDC" },
+        "parameters": [
+          {
+            "name": "d",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "example": "2026-05-09" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "30yr yield on date" },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/treasury/public": {
+      "get": {
+        "tags": ["Free"],
+        "summary": "Current 30-year Treasury yield (free)",
+        "description": "Returns the current 30-year Treasury yield at no charge. Used by the LastLook Data landing page.",
+        "operationId": "getTreasuryPublic",
+        "responses": {
+          "200": {
+            "description": "Current 30yr yield",
+            "content": {
+              "application/json": {
+                "example": { "yield_percent": 4.92, "date": "2026-05-15" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Free"],
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Service status",
+            "content": {
+              "application/json": {
+                "example": { "status": "ok", "service": "LastLook Data", "version": "2.8.0" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Observation": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "format": "date", "example": "2026-05-15" },
+          "value": { "type": "number", "example": 6.86 }
+        }
+      },
+      "FredCurrentResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string", "example": "LastLook Data" },
+          "series_id": { "type": "string", "example": "MORTGAGE30US" },
+          "label": { "type": "string", "example": "30-Year Fixed Rate Mortgage Average" },
+          "date": { "type": "string", "format": "date" },
+          "value": { "type": "number" },
+          "note": { "type": "string" }
+        }
+      },
+      "FredSeriesResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "series_id": { "type": "string" },
+          "label": { "type": "string" },
+          "count": { "type": "integer" },
+          "start": { "type": "string", "format": "date" },
+          "end": { "type": "string", "format": "date" },
+          "observations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Observation" }
+          },
+          "note": { "type": "string" }
+        }
+      },
+      "FxCurrentResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "pair": { "type": "string", "example": "EURUSD" },
+          "label": { "type": "string", "example": "Euro / US Dollar" },
+          "date": { "type": "string", "format": "date" },
+          "rate": { "type": "number", "example": 1.1245 },
+          "base": { "type": "string", "example": "EUR" },
+          "quote": { "type": "string", "example": "USD" },
+          "note": { "type": "string" }
+        }
+      },
+      "FxSeriesResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "pair": { "type": "string" },
+          "label": { "type": "string" },
+          "days": { "type": "integer" },
+          "count": { "type": "integer" },
+          "start": { "type": "string", "format": "date" },
+          "end": { "type": "string", "format": "date" },
+          "observations": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Observation" }
+          },
+          "note": { "type": "string" }
+        }
+      },
+      "YieldCurveResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "as_of": { "type": "string", "format": "date" },
+          "spreads": {
+            "type": "object",
+            "properties": {
+              "2s10s": {
+                "type": "object",
+                "properties": {
+                  "value": { "type": "number" },
+                  "label": { "type": "string" },
+                  "inverted": { "type": "boolean" }
+                }
+              },
+              "3m10y": {
+                "type": "object",
+                "properties": {
+                  "value": { "type": "number" },
+                  "label": { "type": "string" },
+                  "inverted": { "type": "boolean" }
+                }
+              }
+            }
+          },
+          "components": {
+            "type": "object",
+            "properties": {
+              "DGS1MO": { "type": "number" },
+              "DGS2": { "type": "number" },
+              "DGS10": { "type": "number" }
+            }
+          },
+          "signal": { "type": "string", "example": "Partially inverted" },
+          "note": { "type": "string" }
+        }
+      },
+      "RecessionResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "as_of": { "type": "string", "format": "date" },
+          "sahm_rule": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "number", "example": 0.37 },
+              "threshold": { "type": "number", "example": 0.50 },
+              "triggered": { "type": "boolean", "example": false },
+              "signal": { "type": "string", "example": "No recession signal" }
+            }
+          },
+          "note": { "type": "string" }
+        }
+      },
+      "PolicySpreadResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "as_of": { "type": "string", "format": "date" },
+          "effr": { "type": "number", "example": 4.33 },
+          "iorb": { "type": "number", "example": 4.40 },
+          "spread": { "type": "number", "example": -0.07 },
+          "interpretation": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      },
+      "CalendarResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "calendar_start": { "type": "string", "format": "date" },
+          "calendar_end": { "type": "string", "format": "date" },
+          "count": { "type": "integer" },
+          "releases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string", "format": "date" },
+                "release_id": { "type": "integer" },
+                "release_name": { "type": "string" }
+              }
+            }
+          },
+          "note": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "PaymentRequired": {
+        "description": "Payment required via x402 protocol. Send USDC on Base (eip155:8453).",
+        "content": {
+          "application/json": {
+            "example": {
+              "error": "Payment Required",
+              "x402Version": 2,
+              "accepts": [
+                {
+                  "scheme": "exact",
+                  "network": "eip155:8453",
+                  "maxAmountRequired": "10000",
+                  "resource": "https://api.lastlookdata.com/api/current?id=DGS10",
+                  "payTo": "0xB4848d1b4b7E31B75b9b30d717F89777dC65D68e"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid parameters",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      },
+      "NotFound": {
+        "description": "No data available for the requested date or series",
+        "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+        }
+      }
+    }
+  }
+}

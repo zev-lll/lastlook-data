@@ -547,6 +547,7 @@ app.get('/', (req, res) => {
     version: '2.7.0',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
+    openapi: 'https://api.lastlookdata.com/openapi.json',
     payment: 'x402 v2 protocol, USDC on Base mainnet (eip155:8453)',
     endpoint_pattern: {
       'Current value':        'GET /api/current?id=SERIES_ID — $0.01 USDC',
@@ -591,6 +592,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Dat
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
+app.get('/openapi.json', (req, res) => res.sendFile('openapi.json', { root: __dirname }));
+
 app.get('/.well-known/x402.json', (req, res) => res.json({
   name: 'LastLook Data',
   description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators. Pay per query via x402. No API keys or accounts required.',
@@ -598,6 +601,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
   url: 'https://www.lastlookdata.com',
   website: 'https://www.lastlookdata.com',
   docs: 'https://www.lastlookdata.com/docs',
+  openapi: 'https://api.lastlookdata.com/openapi.json',
   category: 'finance',
   version: '1.0',
   base_url: 'https://api.lastlookdata.com',
