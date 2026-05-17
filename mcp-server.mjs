@@ -119,9 +119,9 @@ server.registerTool(
         'DGS30','DGS10','DGS5','DGS2','DGS1MO',
         'MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST',
         'FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR',
-        'CPIAUCSL','CPILFESL','UNRATE','GDP',
+        'CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME',
         'DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP',
-      ]).describe('FRED series ID. Use IORB for Interest on Reserve Balances, EFFR for Effective Federal Funds Rate, FEDFUNDS for Fed funds monthly average, MORTGAGE30US for 30-yr mortgage rate, DCOILWTICO for WTI crude oil, etc.'),
+      ]).describe('FRED series ID. Use IORB for Interest on Reserve Balances, EFFR for Effective Federal Funds Rate, FEDFUNDS for Fed funds monthly average, MORTGAGE30US for 30-yr mortgage rate, DCOILWTICO for WTI crude oil, SAHMREALTIME for Sahm Rule recession indicator, etc.'),
       days: z.enum(['30','90','365']).describe('History window: 30 ($0.05), 90 ($0.10), or 365 ($0.25). Use 30 for current/recent values.'),
     }
   },
@@ -214,6 +214,238 @@ server.registerTool(
   }
 );
 
+// ── Tool 6: Current FRED value (single value, cheapest) ──────────────────────
+server.registerTool(
+  'get_current_value',
+  {
+    title: 'Get Current FRED Series Value',
+    description:
+      'Returns only the single most recent value for any supported FRED series. Cheaper than get_series ($0.01 vs $0.05). ' +
+      'Use this when you need just the latest reading — e.g. current CPI, current unemployment rate, current mortgage rate. ' +
+      'Use get_series instead when you need historical observations.',
+    inputSchema: {
+      series_id: z.enum([
+        'DGS30','DGS10','DGS5','DGS2','DGS1MO',
+        'MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST',
+        'FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR',
+        'CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME',
+        'DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP',
+      ]).describe('FRED series ID e.g. CPIAUCSL, UNRATE, MORTGAGE30US, DGS10, DCOILWTICO'),
+    }
+  },
+  async ({ series_id }) => {
+    const endpoint = `https://api.lastlookdata.com/api/current?id=${series_id}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { label, value, date } = response.data;
+      return { content: [{ type: 'text', text: `${label} (${series_id}): ${value} (as of ${date})\nSource: LastLook Data via FRED` }] };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.01 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 7: FRED value by date ────────────────────────────────────────────────
+server.registerTool(
+  'get_value_by_date',
+  {
+    title: 'Get FRED Series Value by Date',
+    description: 'Returns the value of any supported FRED series for a specific date. Business days only. Use YYYY-MM-DD format.',
+    inputSchema: {
+      series_id: z.enum([
+        'DGS30','DGS10','DGS5','DGS2','DGS1MO',
+        'MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST',
+        'FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR',
+        'CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME',
+        'DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP',
+      ]).describe('FRED series ID'),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('Date in YYYY-MM-DD format e.g. 2026-01-15'),
+    }
+  },
+  async ({ series_id, date }) => {
+    const endpoint = `https://api.lastlookdata.com/api/date?id=${series_id}&d=${date}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { label, value, date: dataDate } = response.data;
+      return { content: [{ type: 'text', text: `${label} (${series_id}) on ${dataDate}: ${value}\nSource: LastLook Data via FRED` }] };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.01 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 8: FX rate by date ───────────────────────────────────────────────────
+server.registerTool(
+  'get_fx_rate_by_date',
+  {
+    title: 'Get G10 FX Rate by Date',
+    description: 'Returns the exchange rate for a G10 currency pair on a specific date. Source: European Central Bank. Use YYYY-MM-DD format.',
+    inputSchema: {
+      pair: z.enum(['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'])
+        .describe('G10 currency pair e.g. EURUSD, USDJPY'),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('Date in YYYY-MM-DD format e.g. 2026-01-15'),
+    }
+  },
+  async ({ pair, date }) => {
+    const endpoint = `https://api.lastlookdata.com/api/fx/date?pair=${pair}&d=${date}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { rate, date: dataDate, label } = response.data;
+      return { content: [{ type: 'text', text: `${label} (${pair}) on ${dataDate}: ${rate}\nSource: LastLook Data via ECB` }] };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.01 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 9: Yield curve spreads ───────────────────────────────────────────────
+server.registerTool(
+  'get_yield_curve',
+  {
+    title: 'Get Yield Curve Spreads',
+    description:
+      'Returns 2s10s (2-year vs 10-year) and 3m10y (3-month vs 10-year) Treasury yield curve spreads with inversion signal. ' +
+      'An inverted yield curve (negative spread) historically precedes recessions. Source: FRED.',
+    inputSchema: {}
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/derived/yield-curve';
+    try {
+      const response = await axios.get(endpoint);
+      const d = response.data;
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `Yield Curve Spreads (as of ${d.date})\n\n` +
+            `2s10s spread: ${d.spread_2s10s}% (DGS10 ${d.DGS10}% − DGS2 ${d.DGS2}%)\n` +
+            `3m10y spread: ${d.spread_3m10y}% (DGS10 ${d.DGS10}% − DGS1MO ${d.DGS1MO}%)\n` +
+            `Inverted: ${d.inverted}\n\n` +
+            `Source: LastLook Data via FRED`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.03 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 10: Sahm Rule recession indicator ────────────────────────────────────
+server.registerTool(
+  'get_recession_indicator',
+  {
+    title: 'Get Sahm Rule Recession Indicator',
+    description:
+      'Returns the real-time Sahm Rule recession indicator. A value >= 0.50 signals a recession is likely underway. ' +
+      'The indicator measures the rise in unemployment from its recent low. Source: FRED SAHMREALTIME.',
+    inputSchema: {}
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/derived/recession';
+    try {
+      const response = await axios.get(endpoint);
+      const d = response.data;
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `Sahm Rule Recession Indicator (as of ${d.date})\n\n` +
+            `Value: ${d.value}\n` +
+            `Triggered: ${d.triggered} (threshold: 0.50)\n` +
+            `Signal: ${d.signal}\n\n` +
+            `Source: LastLook Data via FRED`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.02 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 11: Fed policy spread ────────────────────────────────────────────────
+server.registerTool(
+  'get_policy_spread',
+  {
+    title: 'Get Fed Policy Spread (EFFR vs IORB)',
+    description:
+      'Returns the spread between the Effective Federal Funds Rate (EFFR) and Interest on Reserve Balances (IORB), ' +
+      'with an interpretation of Fed policy stance. EFFR below IORB is normal; a large gap signals stress. Source: FRED.',
+    inputSchema: {}
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/derived/policy-spread';
+    try {
+      const response = await axios.get(endpoint);
+      const d = response.data;
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `Fed Policy Spread (as of ${d.date})\n\n` +
+            `EFFR: ${d.EFFR}%\n` +
+            `IORB: ${d.IORB}%\n` +
+            `Spread (EFFR − IORB): ${d.spread}%\n` +
+            `Interpretation: ${d.interpretation}\n\n` +
+            `Source: LastLook Data via FRED`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.02 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 12: Economic calendar ────────────────────────────────────────────────
+server.registerTool(
+  'get_economic_calendar',
+  {
+    title: 'Get Economic Calendar',
+    description:
+      'Returns upcoming FRED economic data release dates — CPI, jobs report, GDP, Treasury rates, and more. ' +
+      'Use this to find out when the next major economic data will be published.',
+    inputSchema: {
+      days: z.enum(['30','60','90']).describe('Lookahead window in days: 30, 60, or 90'),
+    }
+  },
+  async ({ days }) => {
+    const endpoint = `https://api.lastlookdata.com/api/calendar?days=${days}`;
+    try {
+      const response = await axios.get(endpoint);
+      const { releases, count } = response.data;
+      const rows = releases.map(r => `  ${r.date}  ${r.release_name}`).join('\n');
+      return {
+        content: [{
+          type: 'text',
+          text: `Upcoming FRED Releases (next ${days} days) — ${count} events\n\nDate        Release\n──────────  ───────\n${rows}\n\nSource: LastLook Data via FRED`
+        }]
+      };
+    } catch (err) {
+      if (err.response?.status === 402) {
+        return { content: [{ type: 'text', text: `Payment required: $0.02 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      }
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
 // ── Transport ─────────────────────────────────────────────────────────────────
 const isHTTP = process.env.MCP_TRANSPORT === 'http';
 
@@ -235,7 +467,7 @@ if (isHTTP) {
     await transport.handleRequest(req, res);
   });
 
-  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.7.0' }));
+  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.8.3' }));
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`LastLook Data MCP server running on port ${PORT}`));
