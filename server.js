@@ -34,6 +34,7 @@ const ALLOWED_SERIES = new Set([
   'FEDFUNDS', 'SOFR', 'DPRIME', 'DTB3', 'IORB', 'EFFR',
   'CPIAUCSL', 'CPILFESL', 'UNRATE', 'GDP',
   'DCOILWTICO', 'DCOILBRENTEU', 'GASREGCOVW', 'DHHNGSP',
+  'SAHMREALTIME',
 ]);
 
 const SERIES_LABELS = {
@@ -60,6 +61,7 @@ const SERIES_LABELS = {
   DCOILBRENTEU: 'Brent Crude Oil Price',
   GASREGCOVW:   'US Regular Gasoline Price',
   DHHNGSP:      'Henry Hub Natural Gas Price',
+  SAHMREALTIME: 'Real-Time Sahm Rule Recession Indicator',
 };
 
 const ALLOWED_FX = new Set([
@@ -82,6 +84,8 @@ const PAID_PATHS = [
   '/api/series/30', '/api/series/90', '/api/series/365',
   '/api/treasury/current', '/api/treasury/date',
   '/api/fx/current', '/api/fx/date', '/api/fx/series',
+  '/api/derived/yield-curve', '/api/derived/recession', '/api/derived/policy-spread',
+  '/api/calendar',
 ];
 app.use((req, res, next) => {
   if (req.method === 'HEAD' && PAID_PATHS.includes(req.path)) return res.status(402).end();
@@ -371,6 +375,88 @@ app.use(
           }),
         },
       },
+
+      // ── Derived: yield curve spreads ($0.03) ──────────────────────────────────
+      'GET /api/derived/yield-curve': {
+        accepts: [{ scheme: 'exact', price: '$0.03', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — yield curve spreads (2s10s and 3m10y) with inversion signal. Computed from FRED Treasury data.',
+        mimeType: 'application/json',
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: {},
+            inputSchema: { properties: {} },
+            output: {
+              example: {
+                service: 'LastLook Data', as_of: '2026-05-15',
+                spreads: { '2s10s': { value: -0.15, inverted: true }, '3m10y': { value: 0.42, inverted: false } },
+                components: { DGS2: 4.85, DGS10: 4.70, DGS1MO: 4.28 },
+                signal: 'Partially inverted',
+              },
+            },
+          }),
+        },
+      },
+
+      // ── Derived: Sahm Rule recession indicator ($0.02) ────────────────────────
+      'GET /api/derived/recession': {
+        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — real-time Sahm Rule recession indicator. Value >= 0.5 signals recession underway. Source: FRED SAHMREALTIME.',
+        mimeType: 'application/json',
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: {},
+            inputSchema: { properties: {} },
+            output: {
+              example: {
+                service: 'LastLook Data', as_of: '2026-04-01',
+                sahm_rule: { value: 0.37, threshold: 0.50, triggered: false, signal: 'No recession signal' },
+              },
+            },
+          }),
+        },
+      },
+
+      // ── Derived: Fed policy spread ($0.02) ────────────────────────────────────
+      'GET /api/derived/policy-spread': {
+        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — EFFR vs IORB spread. Shows where the effective Fed funds rate trades relative to interest on reserves.',
+        mimeType: 'application/json',
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: {},
+            inputSchema: { properties: {} },
+            output: {
+              example: {
+                service: 'LastLook Data', as_of: '2026-05-14',
+                effr: 4.33, iorb: 4.40, spread: -0.07,
+                interpretation: 'EFFR trading below IORB — within normal operating band',
+              },
+            },
+          }),
+        },
+      },
+
+      // ── Economic calendar ($0.02) ─────────────────────────────────────────────
+      'GET /api/calendar': {
+        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — upcoming FRED economic data release dates. CPI, jobs, GDP, Treasury, and more. Use ?days=30|60|90.',
+        mimeType: 'application/json',
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { days: '30' },
+            inputSchema: {
+              properties: { days: { type: 'string', description: 'Lookahead window in days', enum: ['30','60','90'] } },
+            },
+            output: {
+              example: {
+                service: 'LastLook Data', calendar_start: '2026-05-16', calendar_end: '2026-06-15',
+                count: 12,
+                releases: [{ date: '2026-05-20', release_id: 50, release_name: 'Employment Situation' }],
+              },
+            },
+          }),
+        },
+      },
     },
     server,
   )
@@ -520,55 +606,55 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
   resources: [
     {
       name: 'FRED Series — Current Value',
-      path: '/api/current',
+      url: 'https://api.lastlookdata.com/api/current',
       method: 'GET',
       description: 'Most recent value for any supported FRED series. Use ?id= with DGS10, MORTGAGE30US, FEDFUNDS, IORB, EFFR, CPIAUCSL, UNRATE, DCOILWTICO, etc.',
       price: '0.01',
       currency: 'USDC',
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
+      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
       name: 'FRED Series — Value by Date',
-      path: '/api/date',
+      url: 'https://api.lastlookdata.com/api/date',
       method: 'GET',
       description: 'FRED series value for a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.',
       price: '0.01',
       currency: 'USDC',
       schema: {
-        id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
+        id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] },
         d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
       },
     },
     {
       name: 'FRED Series — Last 30 Days',
-      path: '/api/series/30',
+      url: 'https://api.lastlookdata.com/api/series/30',
       method: 'GET',
       description: 'Last 30 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
       price: '0.05',
       currency: 'USDC',
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
+      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
       name: 'FRED Series — Last 90 Days',
-      path: '/api/series/90',
+      url: 'https://api.lastlookdata.com/api/series/90',
       method: 'GET',
       description: 'Last 90 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
       price: '0.10',
       currency: 'USDC',
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
+      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
       name: 'FRED Series — Last 365 Days',
-      path: '/api/series/365',
+      url: 'https://api.lastlookdata.com/api/series/365',
       method: 'GET',
       description: 'Last 365 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
       price: '0.25',
       currency: 'USDC',
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
+      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
     },
     {
       name: 'G10 FX Rate — Current',
-      path: '/api/fx/current',
+      url: 'https://api.lastlookdata.com/api/fx/current',
       method: 'GET',
       description: 'Current exchange rate for any G10 currency pair. Use ?pair=EURUSD, USDJPY, GBPUSD, etc. Source: ECB.',
       price: '0.01',
@@ -577,7 +663,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
     },
     {
       name: 'G10 FX Rate — By Date',
-      path: '/api/fx/date',
+      url: 'https://api.lastlookdata.com/api/fx/date',
       method: 'GET',
       description: 'G10 exchange rate for a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD. Source: ECB.',
       price: '0.01',
@@ -589,7 +675,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
     },
     {
       name: 'G10 FX Rate — Historical Series',
-      path: '/api/fx/series',
+      url: 'https://api.lastlookdata.com/api/fx/series',
       method: 'GET',
       description: 'Historical daily exchange rates for a G10 currency pair. Use ?pair=EURUSD&days=30|90|365. Source: ECB.',
       price: '0.05',
@@ -601,7 +687,7 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
     },
     {
       name: '30-Year Treasury Yield — Current',
-      path: '/api/treasury/current',
+      url: 'https://api.lastlookdata.com/api/treasury/current',
       method: 'GET',
       description: 'Most recent 30-year US Treasury constant maturity yield (DGS30). Source: FRED.',
       price: '0.01',
@@ -609,12 +695,45 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
     },
     {
       name: '30-Year Treasury Yield — By Date',
-      path: '/api/treasury/date',
+      url: 'https://api.lastlookdata.com/api/treasury/date',
       method: 'GET',
       description: '30-year US Treasury yield for a specific date. Use ?d=YYYY-MM-DD.',
       price: '0.01',
       currency: 'USDC',
       schema: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } },
+    },
+    {
+      name: 'Yield Curve Spreads',
+      url: 'https://api.lastlookdata.com/api/derived/yield-curve',
+      method: 'GET',
+      description: '2s10s and 3m10y Treasury yield curve spreads with inversion signal. Computed from FRED data.',
+      price: '0.03',
+      currency: 'USDC',
+    },
+    {
+      name: 'Sahm Rule Recession Indicator',
+      url: 'https://api.lastlookdata.com/api/derived/recession',
+      method: 'GET',
+      description: 'Real-time Sahm Rule recession indicator. Value >= 0.50 signals recession underway. Source: FRED SAHMREALTIME.',
+      price: '0.02',
+      currency: 'USDC',
+    },
+    {
+      name: 'Fed Policy Spread (EFFR vs IORB)',
+      url: 'https://api.lastlookdata.com/api/derived/policy-spread',
+      method: 'GET',
+      description: 'Effective Fed funds rate vs interest on reserves spread, with interpretation. Source: FRED.',
+      price: '0.02',
+      currency: 'USDC',
+    },
+    {
+      name: 'Economic Calendar',
+      url: 'https://api.lastlookdata.com/api/calendar',
+      method: 'GET',
+      description: 'Upcoming FRED economic data release dates — CPI, jobs, GDP, Treasury rates, and more. Use ?days=30|60|90.',
+      price: '0.02',
+      currency: 'USDC',
+      schema: { days: { type: 'string', description: 'Lookahead window', enum: ['30','60','90'] } },
     },
   ],
 }));
@@ -765,6 +884,124 @@ app.get('/api/fx/series', async (req, res) => {
     if (!obs.length) return res.status(404).json({ error: `No data returned for ${pair}` });
     res.json({ service: 'LastLook Data', pair, label: FX_LABELS[pair], days, count: obs.length, start: obs[0].date, end: obs[obs.length-1].date, observations: obs, note: 'Source: Frankfurter (European Central Bank)' });
   } catch (err) { res.status(500).json({ error: 'Failed to fetch FX data', detail: err.message }); }
+});
+
+// ── Derived: yield curve spreads ──────────────────────────────────────────────
+
+app.get('/api/derived/yield-curve', async (req, res) => {
+  try {
+    const start = daysAgoISO(10);
+    const end = todayISO();
+    const [dgs2, dgs10, dgs1mo] = await Promise.all([
+      fetchFredSeries('DGS2', start, end),
+      fetchFredSeries('DGS10', start, end),
+      fetchFredSeries('DGS1MO', start, end),
+    ]);
+    const latest2 = dgs2[dgs2.length - 1];
+    const latest10 = dgs10[dgs10.length - 1];
+    const latest1mo = dgs1mo[dgs1mo.length - 1];
+    if (!latest2 || !latest10 || !latest1mo) return res.status(404).json({ error: 'Insufficient data' });
+    const spread2s10s = parseFloat((latest10.value - latest2.value).toFixed(4));
+    const spread3m10y = parseFloat((latest10.value - latest1mo.value).toFixed(4));
+    const asOf = latest10.date;
+    const inverted2s10s = spread2s10s < 0;
+    const inverted3m10y = spread3m10y < 0;
+    const signal = inverted2s10s && inverted3m10y ? 'Fully inverted'
+      : inverted2s10s || inverted3m10y ? 'Partially inverted'
+      : 'Normal (upward sloping)';
+    res.json({
+      service: 'LastLook Data',
+      as_of: asOf,
+      spreads: {
+        '2s10s': { value: spread2s10s, label: '10Y minus 2Y Treasury', inverted: inverted2s10s },
+        '3m10y': { value: spread3m10y, label: '10Y minus 3-Month T-Bill', inverted: inverted3m10y },
+      },
+      components: { DGS1MO: latest1mo.value, DGS2: latest2.value, DGS10: latest10.value },
+      signal,
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to compute yield curve', detail: err.message }); }
+});
+
+// ── Derived: Sahm Rule recession indicator ────────────────────────────────────
+
+app.get('/api/derived/recession', async (req, res) => {
+  try {
+    const obs = await fetchFredSeries('SAHMREALTIME', daysAgoISO(60), todayISO());
+    const latest = obs[obs.length - 1];
+    if (!latest) return res.status(404).json({ error: 'No data available' });
+    const triggered = latest.value >= 0.5;
+    res.json({
+      service: 'LastLook Data',
+      as_of: latest.date,
+      sahm_rule: {
+        value: latest.value,
+        threshold: 0.50,
+        triggered,
+        signal: triggered ? 'Recession signal triggered' : 'No recession signal',
+      },
+      note: 'Sahm Rule: value >= 0.50 indicates recession likely underway. Source: FRED (SAHMREALTIME)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch recession indicator', detail: err.message }); }
+});
+
+// ── Derived: Fed policy spread (EFFR vs IORB) ─────────────────────────────────
+
+app.get('/api/derived/policy-spread', async (req, res) => {
+  try {
+    const start = daysAgoISO(10);
+    const end = todayISO();
+    const [effr, iorb] = await Promise.all([
+      fetchFredSeries('EFFR', start, end),
+      fetchFredSeries('IORB', start, end),
+    ]);
+    const latestEffr = effr[effr.length - 1];
+    const latestIorb = iorb[iorb.length - 1];
+    if (!latestEffr || !latestIorb) return res.status(404).json({ error: 'Insufficient data' });
+    const spread = parseFloat((latestEffr.value - latestIorb.value).toFixed(4));
+    const interpretation = spread < 0
+      ? 'EFFR trading below IORB — within normal operating band'
+      : spread === 0 ? 'EFFR at IORB — at floor'
+      : 'EFFR trading above IORB — unusual, monitor for reserve scarcity';
+    res.json({
+      service: 'LastLook Data',
+      as_of: latestEffr.date,
+      effr: latestEffr.value,
+      iorb: latestIorb.value,
+      spread,
+      interpretation,
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to compute policy spread', detail: err.message }); }
+});
+
+// ── Economic calendar ─────────────────────────────────────────────────────────
+
+app.get('/api/calendar', async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days, 10) || 30, 90);
+    const start = todayISO();
+    const end = (() => { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); })();
+    const cacheKey = `calendar_${start}_${days}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return res.json(cached);
+    const response = await axios.get('https://api.stlouisfed.org/fred/releases/dates', {
+      params: { api_key: FRED_API_KEY, realtime_start: start, realtime_end: end, sort_order: 'asc', include_release_dates_with_no_data: false, file_type: 'json' },
+    });
+    const releases = (response.data.release_dates || []).map(r => ({
+      date: r.date, release_id: r.release_id, release_name: r.release_name,
+    }));
+    const result = {
+      service: 'LastLook Data',
+      calendar_start: start,
+      calendar_end: end,
+      count: releases.length,
+      releases,
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED) release calendar',
+    };
+    cache.set(cacheKey, result, 3600);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch calendar', detail: err.message }); }
 });
 
 app.listen(PORT, () => console.log(`LastLook Data running on port ${PORT}`));
