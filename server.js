@@ -544,7 +544,7 @@ function todayISO() {
 app.get('/', (req, res) => {
   res.json({
     service: 'LastLook Data',
-    version: '2.8.2',
+    version: '2.8.3',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -588,7 +588,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.8.2' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.8.3' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
@@ -761,11 +761,14 @@ app.get('/.well-known/x402.json', (req, res) => res.json({
 app.get('/api/current', async (req, res) => {
   try {
     const seriesId = (req.query.id || '').toUpperCase();
+    if (ALLOWED_FX.has(seriesId)) return res.status(400).json({
+      error: `"${seriesId}" is an FX pair, not a FRED series. Use /api/fx/current?pair=${seriesId} instead.`,
+    });
     if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({
       error: `Unknown series "${seriesId}".`,
       supported_series: [...ALLOWED_SERIES],
     });
-    const obs = await fetchFredSeries(seriesId, daysAgoISO(14), todayISO());
+    const obs = await fetchFredSeries(seriesId, daysAgoISO(90), todayISO());
     if (!obs.length) return res.status(404).json({ error: `No data returned for ${seriesId}` });
     const latest = obs[obs.length - 1];
     res.json({
@@ -785,6 +788,9 @@ app.get('/api/date', async (req, res) => {
   try {
     const seriesId = (req.query.id || '').toUpperCase();
     const { d } = req.query;
+    if (ALLOWED_FX.has(seriesId)) return res.status(400).json({
+      error: `"${seriesId}" is an FX pair, not a FRED series. Use /api/fx/date?pair=${seriesId}&d=${d || 'YYYY-MM-DD'} instead.`,
+    });
     if (!ALLOWED_SERIES.has(seriesId)) return res.status(400).json({
       error: `Unknown series "${seriesId}".`,
       supported_series: [...ALLOWED_SERIES],
