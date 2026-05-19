@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "version": "2.8.3",
+  "version": "2.9.0",
   "name": "LastLook Data",
   "description": "Financial market data and derived market indicators for AI agents — FRED macro data, G10 FX rates, energy prices, yield curve spreads, recession signals, Fed policy spread, and economic calendar. Pay per query via x402, no accounts or API keys required.",
   "url": "https://www.lastlookdata.com",

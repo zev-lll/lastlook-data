@@ -13,6 +13,36 @@ const { facilitator: cdpFacilitator } = require('@coinbase/x402');
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
+
+// Shared brand fields for all Bazaar endpoint declarations
+const LASTLOOK_BRAND = {
+  name: 'LastLook Data',
+  description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, energy prices, and macro indicators. Pay per query via x402.',
+  category: 'finance',
+  logo_url: 'https://api.lastlookdata.com/logo.png',
+};
+
+function lastlookExtension(inputSchema, outputExample) {
+  // Derive minimal example values so AJV validation passes (required fields must be present in info.input.queryParams)
+  const input = {};
+  if (inputSchema?.properties) {
+    for (const [key, spec] of Object.entries(inputSchema.properties)) {
+      input[key] = spec.enum?.[0] ?? '';
+    }
+  }
+  // Pass properties/required without the top-level type:object (library adds that)
+  const cleanSchema = { properties: inputSchema?.properties || {} };
+  if (inputSchema?.required) cleanSchema.required = inputSchema.required;
+
+  const ext = declareDiscoveryExtension({
+    input,
+    inputSchema: cleanSchema,
+    output: outputExample ? { example: outputExample } : undefined,
+  });
+  Object.assign(ext.bazaar.info, LASTLOOK_BRAND);
+  return ext;
+}
+
 const cache = new NodeCache({ stdTTL: 3600 });
 
 const PORT = process.env.PORT || 8080;
@@ -103,25 +133,10 @@ app.use(
         description: 'LastLook Data — most recent value for any supported FRED series. Use ?id=IORB, ?id=EFFR, ?id=MORTGAGE30US, ?id=FEDFUNDS, ?id=DGS10, etc.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { id: 'IORB' },
-            inputSchema: {
-              properties: {
-                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
-              },
-              required: ['id'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series_id: 'IORB',
-                label: 'Interest on Reserve Balances',
-                date: '2026-05-09',
-                value: 4.40,
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
+            { service: 'LastLook Data', series_id: 'IORB', label: 'Interest on Reserve Balances', date: '2026-05-09', value: 4.40, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -131,26 +146,10 @@ app.use(
         description: 'LastLook Data — value for any supported FRED series on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { id: 'DGS10', d: '2026-05-09' },
-            inputSchema: {
-              properties: {
-                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
-                d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-              },
-              required: ['id', 'd'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series_id: 'DGS10',
-                label: '10-Year Treasury Constant Maturity Rate',
-                date: '2026-05-09',
-                value: 4.42,
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] }, d: { type: 'string', description: 'Date in YYYY-MM-DD format' } }, required: ['id', 'd'] },
+            { service: 'LastLook Data', series_id: 'DGS10', label: '10-Year Treasury Constant Maturity Rate', date: '2026-05-09', value: 4.42, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -160,27 +159,10 @@ app.use(
         description: 'LastLook Data — last 30 days of any FRED series. Use for mortgage rates, Fed funds, IORB, EFFR, Treasury yields, CPI, energy prices, and more.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { id: 'MORTGAGE30US' },
-            inputSchema: {
-              properties: {
-                id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] },
-              },
-              required: ['id'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series_id: 'MORTGAGE30US',
-                days: 30,
-                count: 4,
-                start: '2026-04-10',
-                end: '2026-05-09',
-                observations: [{ date: '2026-04-10', value: 6.82 }, { date: '2026-05-09', value: 6.79 }],
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
+            { service: 'LastLook Data', series_id: 'MORTGAGE30US', days: 30, count: 4, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 6.82 }, { date: '2026-05-09', value: 6.79 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -190,25 +172,10 @@ app.use(
         description: 'LastLook Data — last 90 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { id: 'DGS30' },
-            inputSchema: {
-              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
-              required: ['id'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series_id: 'DGS30',
-                days: 90,
-                count: 63,
-                start: '2026-02-09',
-                end: '2026-05-09',
-                observations: [{ date: '2026-02-09', value: 4.75 }, { date: '2026-05-09', value: 4.97 }],
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
+            { service: 'LastLook Data', series_id: 'DGS30', days: 90, count: 63, start: '2026-02-09', end: '2026-05-09', observations: [{ date: '2026-02-09', value: 4.75 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -218,25 +185,10 @@ app.use(
         description: 'LastLook Data — last 365 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { id: 'DGS30' },
-            inputSchema: {
-              properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } },
-              required: ['id'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series_id: 'DGS30',
-                days: 365,
-                count: 252,
-                start: '2025-05-09',
-                end: '2026-05-09',
-                observations: [{ date: '2025-05-09', value: 4.55 }, { date: '2026-05-09', value: 4.97 }],
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
+            { service: 'LastLook Data', series_id: 'DGS30', days: 365, count: 252, start: '2025-05-09', end: '2026-05-09', observations: [{ date: '2025-05-09', value: 4.55 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -246,18 +198,10 @@ app.use(
         description: 'LastLook Data — current 30-year US Treasury yield (DGS30). Alias for /api/current?id=DGS30.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: {},
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series: 'DGS30 - 30-Year Treasury Constant Maturity Rate',
-                date: '2026-05-09',
-                yield_percent: 4.97,
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: '2026-05-09', yield_percent: 4.97, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -266,22 +210,10 @@ app.use(
         description: 'LastLook Data — 30-year Treasury yield for a specific date. Alias for /api/date?id=DGS30&d=YYYY-MM-DD.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { d: '2026-05-09' },
-            inputSchema: {
-              properties: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } },
-              required: ['d'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                series: 'DGS30 - 30-Year Treasury Constant Maturity Rate',
-                date: '2026-05-09',
-                yield_percent: 4.97,
-                note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } }, required: ['d'] },
+            { service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: '2026-05-09', yield_percent: 4.97, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
+          ),
         },
       },
 
@@ -291,25 +223,10 @@ app.use(
         description: 'LastLook Data — current exchange rate for a G10 currency pair. Source: European Central Bank.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { pair: 'EURUSD' },
-            inputSchema: {
-              properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] } },
-              required: ['pair'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                pair: 'EURUSD',
-                label: 'Euro / US Dollar',
-                date: '2026-05-09',
-                rate: 1.1245,
-                base: 'EUR',
-                quote: 'USD',
-                note: 'Source: Frankfurter (European Central Bank)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] } }, required: ['pair'] },
+            { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', date: '2026-05-09', rate: 1.1245, base: 'EUR', quote: 'USD', note: 'Source: Frankfurter (European Central Bank)' },
+          ),
         },
       },
 
@@ -319,28 +236,10 @@ app.use(
         description: 'LastLook Data — exchange rate for a G10 currency pair on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { pair: 'EURUSD', d: '2026-05-09' },
-            inputSchema: {
-              properties: {
-                pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
-                d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-              },
-              required: ['pair', 'd'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                pair: 'EURUSD',
-                label: 'Euro / US Dollar',
-                date: '2026-05-09',
-                rate: 1.1245,
-                base: 'EUR',
-                quote: 'USD',
-                note: 'Source: Frankfurter (European Central Bank)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] }, d: { type: 'string', description: 'Date in YYYY-MM-DD format' } }, required: ['pair', 'd'] },
+            { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', date: '2026-05-09', rate: 1.1245, base: 'EUR', quote: 'USD', note: 'Source: Frankfurter (European Central Bank)' },
+          ),
         },
       },
 
@@ -350,29 +249,10 @@ app.use(
         description: 'LastLook Data — historical daily exchange rates for a G10 currency pair.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { pair: 'EURUSD', days: '30' },
-            inputSchema: {
-              properties: {
-                pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
-                days: { type: 'string', description: '30, 90, or 365 days of history', enum: ['30','90','365'] },
-              },
-              required: ['pair', 'days'],
-            },
-            output: {
-              example: {
-                service: 'LastLook Data',
-                pair: 'EURUSD',
-                label: 'Euro / US Dollar',
-                days: 30,
-                count: 21,
-                start: '2026-04-10',
-                end: '2026-05-09',
-                observations: [{ date: '2026-04-10', value: 1.1102 }, { date: '2026-05-09', value: 1.1245 }],
-                note: 'Source: Frankfurter (European Central Bank)',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] }, days: { type: 'string', description: '30, 90, or 365 days of history', enum: ['30','90','365'] } }, required: ['pair', 'days'] },
+            { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', days: 30, count: 21, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 1.1102 }, { date: '2026-05-09', value: 1.1245 }], note: 'Source: Frankfurter (European Central Bank)' },
+          ),
         },
       },
 
@@ -382,18 +262,10 @@ app.use(
         description: 'LastLook Data — yield curve spreads (2s10s and 3m10y) with inversion signal. Computed from FRED Treasury data.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: {},
-            inputSchema: { properties: {} },
-            output: {
-              example: {
-                service: 'LastLook Data', as_of: '2026-05-15',
-                spreads: { '2s10s': { value: -0.15, inverted: true }, '3m10y': { value: 0.42, inverted: false } },
-                components: { DGS2: 4.85, DGS10: 4.70, DGS1MO: 4.28 },
-                signal: 'Partially inverted',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-15', spreads: { '2s10s': { value: -0.15, inverted: true }, '3m10y': { value: 0.42, inverted: false } }, components: { DGS2: 4.85, DGS10: 4.70, DGS1MO: 4.28 }, signal: 'Partially inverted' },
+          ),
         },
       },
 
@@ -403,16 +275,10 @@ app.use(
         description: 'LastLook Data — real-time Sahm Rule recession indicator. Value >= 0.5 signals recession underway. Source: FRED SAHMREALTIME.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: {},
-            inputSchema: { properties: {} },
-            output: {
-              example: {
-                service: 'LastLook Data', as_of: '2026-04-01',
-                sahm_rule: { value: 0.37, threshold: 0.50, triggered: false, signal: 'No recession signal' },
-              },
-            },
-          }),
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-04-01', sahm_rule: { value: 0.37, threshold: 0.50, triggered: false, signal: 'No recession signal' } },
+          ),
         },
       },
 
@@ -422,17 +288,10 @@ app.use(
         description: 'LastLook Data — EFFR vs IORB spread. Shows where the effective Fed funds rate trades relative to interest on reserves.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: {},
-            inputSchema: { properties: {} },
-            output: {
-              example: {
-                service: 'LastLook Data', as_of: '2026-05-14',
-                effr: 4.33, iorb: 4.40, spread: -0.07,
-                interpretation: 'EFFR trading below IORB — within normal operating band',
-              },
-            },
-          }),
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-14', effr: 4.33, iorb: 4.40, spread: -0.07, interpretation: 'EFFR trading below IORB — within normal operating band' },
+          ),
         },
       },
 
@@ -442,19 +301,10 @@ app.use(
         description: 'LastLook Data — upcoming FRED economic data release dates. CPI, jobs, GDP, Treasury, and more. Use ?days=30|60|90.',
         mimeType: 'application/json',
         extensions: {
-          ...declareDiscoveryExtension({
-            input: { days: '30' },
-            inputSchema: {
-              properties: { days: { type: 'string', description: 'Lookahead window in days', enum: ['30','60','90'] } },
-            },
-            output: {
-              example: {
-                service: 'LastLook Data', calendar_start: '2026-05-16', calendar_end: '2026-06-15',
-                count: 12,
-                releases: [{ date: '2026-05-20', release_id: 50, release_name: 'Employment Situation' }],
-              },
-            },
-          }),
+          ...lastlookExtension(
+            { type: 'object', properties: { days: { type: 'string', description: 'Lookahead window in days', enum: ['30','60','90'] } } },
+            { service: 'LastLook Data', calendar_start: '2026-05-16', calendar_end: '2026-06-15', count: 12, releases: [{ date: '2026-05-20', release_id: 50, release_name: 'Employment Situation' }] },
+          ),
         },
       },
     },
@@ -545,7 +395,7 @@ app.get('/', (req, res) => {
   if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
-    version: '2.8.3',
+    version: '2.9.0',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -582,7 +432,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.8.3' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.9.0' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
