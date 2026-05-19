@@ -542,6 +542,7 @@ function todayISO() {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
+  if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
     version: '2.8.3',
