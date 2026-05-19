@@ -587,6 +587,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Dat
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
 app.get('/openapi.json', (req, res) => res.sendFile('openapi.json', { root: __dirname }));
+app.get('/agent.json', (req, res) => res.sendFile('agent.json', { root: __dirname }));
+app.get('/.well-known/agent.json', (req, res) => res.sendFile('agent.json', { root: __dirname }));
 
 app.get('/.well-known/x402.json', (req, res) => res.json({
   name: 'LastLook Data',

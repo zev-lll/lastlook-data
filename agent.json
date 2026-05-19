@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "version": "2.8.3",
+  "name": "LastLook Data",
+  "description": "Financial market data and derived market indicators for AI agents — FRED macro data, G10 FX rates, energy prices, yield curve spreads, recession signals, Fed policy spread, and economic calendar. Pay per query via x402, no accounts or API keys required.",
+  "url": "https://www.lastlookdata.com",
+  "logo": "https://api.lastlookdata.com/logo.png",
+  "api_base": "https://api.lastlookdata.com",
+  "mcp_server": "https://mcp.lastlookdata.com/mcp",
+  "payment": {
+    "protocol": "x402",
+    "version": "2",
+    "network": "eip155:8453",
+    "currency": "USDC"
+  },
+  "endpoint_pattern": {
+    "current_value": "GET /api/current?id=SERIES_ID — $0.01",
+    "value_by_date": "GET /api/date?id=SERIES_ID&d=YYYY-MM-DD — $0.01",
+    "last_30_days": "GET /api/series/30?id=SERIES_ID — $0.05",
+    "last_90_days": "GET /api/series/90?id=SERIES_ID — $0.10",
+    "last_365_days": "GET /api/series/365?id=SERIES_ID — $0.25",
+    "fx_current": "GET /api/fx/current?pair=PAIR — $0.01",
+    "fx_by_date": "GET /api/fx/date?pair=PAIR&d=YYYY-MM-DD — $0.01",
+    "fx_series": "GET /api/fx/series?pair=PAIR&days=N — $0.05/$0.10/$0.25"
+  },
+  "endpoints": [
+    { "path": "/api/current",               "method": "GET", "description": "Most recent value for any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.01 },
+    { "path": "/api/date",                  "method": "GET", "description": "FRED series value on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD.", "price_usdc": 0.01 },
+    { "path": "/api/series/30",             "method": "GET", "description": "Last 30 days of any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.05 },
+    { "path": "/api/series/90",             "method": "GET", "description": "Last 90 days of any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.10 },
+    { "path": "/api/series/365",            "method": "GET", "description": "Last 365 days of any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.25 },
+    { "path": "/api/treasury/current",      "method": "GET", "description": "Current Treasury yield curve — all maturities (1M, 2Y, 5Y, 10Y, 30Y) in one call.", "price_usdc": 0.01 },
+    { "path": "/api/treasury/date",         "method": "GET", "description": "Treasury yield curve on a specific date. Use ?d=YYYY-MM-DD.", "price_usdc": 0.01 },
+    { "path": "/api/fx/current",            "method": "GET", "description": "Current G10 FX rate. Use ?pair=EURUSD, GBPUSD, USDJPY, etc.", "price_usdc": 0.01 },
+    { "path": "/api/fx/date",               "method": "GET", "description": "G10 FX rate on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.", "price_usdc": 0.01 },
+    { "path": "/api/fx/series",             "method": "GET", "description": "Historical G10 FX rate series. Use ?pair=EURUSD&days=30 (or 90, 365).", "price_usdc": 0.05 },
+    { "path": "/api/derived/yield-curve",   "method": "GET", "description": "2s10s and 3m10y Treasury yield curve spreads with inversion signal.", "price_usdc": 0.03 },
+    { "path": "/api/derived/recession",     "method": "GET", "description": "Real-Time Sahm Rule recession indicator. Value >= 0.50 signals recession.", "price_usdc": 0.03 },
+    { "path": "/api/derived/policy-spread", "method": "GET", "description": "EFFR vs IORB spread with plain-English interpretation of Fed policy stance.", "price_usdc": 0.03 },
+    { "path": "/api/calendar",              "method": "GET", "description": "Upcoming FOMC meeting date and CPI release date.", "price_usdc": 0.01 }
+  ],
+  "common_use_cases": {
+    "current_iorb":          "GET /api/current?id=IORB",
+    "current_effr":          "GET /api/current?id=EFFR",
+    "current_30yr_mortgage": "GET /api/current?id=MORTGAGE30US",
+    "current_15yr_mortgage": "GET /api/current?id=MORTGAGE15US",
+    "current_fed_funds":     "GET /api/current?id=FEDFUNDS",
+    "current_10yr_treasury": "GET /api/current?id=DGS10",
+    "current_30yr_treasury": "GET /api/current?id=DGS30",
+    "current_cpi":           "GET /api/current?id=CPIAUCSL",
+    "current_unemployment":  "GET /api/current?id=UNRATE",
+    "current_sahm_rule":     "GET /api/current?id=SAHMREALTIME",
+    "current_wti_crude":     "GET /api/current?id=DCOILWTICO",
+    "current_brent_crude":   "GET /api/current?id=DCOILBRENTEU",
+    "current_natural_gas":   "GET /api/current?id=DHHNGSP",
+    "current_gasoline":      "GET /api/current?id=GASREGCOVW",
+    "current_eurusd":        "GET /api/fx/current?pair=EURUSD",
+    "yield_curve_spreads":   "GET /api/derived/yield-curve",
+    "recession_signal":      "GET /api/derived/recession",
+    "fed_policy_spread":     "GET /api/derived/policy-spread",
+    "economic_calendar":     "GET /api/calendar?days=30"
+  },
+  "pricing": {
+    "GET /api/current":               "0.01",
+    "GET /api/date":                  "0.01",
+    "GET /api/series/30":             "0.05",
+    "GET /api/series/90":             "0.10",
+    "GET /api/series/365":            "0.25",
+    "GET /api/fx/current":            "0.01",
+    "GET /api/fx/date":               "0.01",
+    "GET /api/fx/series":             "0.05",
+    "GET /api/treasury/current":      "0.01",
+    "GET /api/treasury/date":         "0.01",
+    "GET /api/derived/yield-curve":   "0.03",
+    "GET /api/derived/recession":     "0.03",
+    "GET /api/derived/policy-spread": "0.03",
+    "GET /api/calendar":              "0.01"
+  },
+  "data_sources": {
+    "fred": {
+      "treasury":        ["DGS30","DGS10","DGS5","DGS2","DGS1MO"],
+      "mortgage_housing":["MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST"],
+      "benchmark_rates": ["FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR"],
+      "macro":           ["CPIAUCSL","CPILFESL","UNRATE","SAHMREALTIME","GDP"],
+      "energy":          ["DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP"]
+    },
+    "fx": ["EURUSD","GBPUSD","USDJPY","USDCHF","USDCAD","AUDUSD","NZDUSD","USDSEK","USDNOK"]
+  },
+  "series_count": 24,
+  "legacy_endpoints": {
+    "note": "Backward-compatible aliases maintained for existing integrations",
+    "/api/treasury/current": "alias for /api/current?id=DGS30",
+    "/api/treasury/date":    "alias for /api/date?id=DGS30&d=YYYY-MM-DD"
+  },
+  "contact": "hello@lastlookdata.com",
+  "provider": "LastLook Loans, Inc.",
+  "provider_url": "https://www.lastlookmortgage.com"
+}
