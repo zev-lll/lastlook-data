@@ -395,7 +395,7 @@ app.get('/', (req, res) => {
   if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
-    version: '2.9.0',
+    version: '2.9.1',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -440,7 +440,7 @@ app.get('/openapi.json', (req, res) => res.sendFile('openapi.json', { root: __di
 app.get('/agent.json', (req, res) => res.sendFile('agent.json', { root: __dirname }));
 app.get('/.well-known/agent.json', (req, res) => res.sendFile('agent.json', { root: __dirname }));
 
-app.get('/.well-known/x402.json', (req, res) => res.json({
+app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json({
   name: 'LastLook Data',
   description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators. Pay per query via x402. No API keys or accounts required.',
   logo_url: 'https://api.lastlookdata.com/logo.png',
