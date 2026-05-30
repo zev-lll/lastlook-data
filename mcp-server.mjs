@@ -8,7 +8,7 @@ import express from 'express';
 function createMcpServer() {
 const server = new McpServer({
   name: 'lastlook-data',
-  version: '2.8.3',
+  version: '2.10.0',
   description: 'LastLook Data — financial market data for AI agents. FRED macro data (Treasury yields, mortgage rates, benchmark rates, CPI, IORB, EFFR, energy prices), G10 FX rates, derived indicators. Pay per query via x402.'
 });
 
@@ -592,6 +592,278 @@ server.registerTool(
   }
 );
 
+// ── Tool 13: Rate Environment Bundle ─────────────────────────────────────────
+server.registerTool(
+  'get_bundle_rate_environment',
+  {
+    title: 'Get Rate Environment Snapshot Bundle',
+    description:
+      'Returns a complete rate environment snapshot in one call: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30, ' +
+      'plus computed yield curve spreads (2s10s and 3m10y), Fed policy spread (EFFR vs IORB), and curve shape signal. ' +
+      'Use this instead of multiple individual calls when you need the full rate picture.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier'),
+      series:  z.record(z.string(), z.number().nullable()).describe('Current values for each rate series'),
+      derived: z.record(z.string(), z.any()).describe('Computed spread and policy fields'),
+      signals: z.record(z.string(), z.string()).describe('Curve shape and policy stance signals'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/rate-environment';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const lines = [
+        `Rate Environment Snapshot (as of ${d.as_of})`,
+        '',
+        'Rates:',
+        ...Object.entries(d.series).filter(([,v]) => v !== null).map(([k, v]) => `  ${k}: ${v}%`),
+        '',
+        'Derived:',
+        `  2s10s spread: ${d.derived.spread_2s10s}% (${d.derived.spread_2s10s_label})`,
+        d.derived.spread_3m10y !== null ? `  3m10y spread: ${d.derived.spread_3m10y}%` : null,
+        d.derived.policy_spread !== null ? `  Policy spread: ${d.derived.policy_spread}%` : null,
+        '',
+        `Signals: ${d.signals.curve_shape} | ${d.signals.policy_stance}`,
+        '',
+        'Source: LastLook Data via FRED',
+      ].filter(x => x !== null);
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.35 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 14: Mortgage Market Pulse Bundle ────────────────────────────────────
+server.registerTool(
+  'get_bundle_mortgage_pulse',
+  {
+    title: 'Get Mortgage Market Pulse Bundle',
+    description:
+      'Returns a complete mortgage market snapshot: 30yr and 15yr mortgage rates, 10Y Treasury yield, ' +
+      'Fed funds rate, median home price (MSPUS), housing starts (HOUST), MBS spread (30yr mortgage minus 10Y), ' +
+      'and 30-day rate trend signal. Use this for mortgage market analysis.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier'),
+      series:  z.record(z.string(), z.number().nullable()).describe('Current values for each series'),
+      derived: z.record(z.string(), z.any()).describe('MBS spread and related computed fields'),
+      signals: z.record(z.string(), z.string()).describe('Rate trend signal'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/mortgage-pulse';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const lines = [
+        `Mortgage Market Pulse (as of ${d.as_of})`,
+        '',
+        'Rates:',
+        d.series.MORTGAGE30US !== null ? `  30yr mortgage: ${d.series.MORTGAGE30US}%` : null,
+        d.series.MORTGAGE15US !== null ? `  15yr mortgage: ${d.series.MORTGAGE15US}%` : null,
+        d.series.DGS10 !== null ? `  10Y Treasury: ${d.series.DGS10}%` : null,
+        d.series.FEDFUNDS !== null ? `  Fed Funds: ${d.series.FEDFUNDS}%` : null,
+        '',
+        'Housing:',
+        d.series.MSPUS !== null ? `  Median home price: $${d.series.MSPUS?.toLocaleString()}` : null,
+        d.series.HOUST !== null ? `  Housing starts: ${d.series.HOUST}K` : null,
+        '',
+        `MBS Spread: ${d.derived.mbs_spread}% (${d.derived.mbs_spread_label})`,
+        `Rate trend (30d): ${d.signals.rate_trend_30d}`,
+        '',
+        'Source: LastLook Data via FRED',
+      ].filter(x => x !== null);
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.40 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 15: Macro Health Bundle ─────────────────────────────────────────────
+server.registerTool(
+  'get_bundle_macro',
+  {
+    title: 'Get Macro Health Snapshot Bundle',
+    description:
+      'Returns a macro health snapshot: GDP, unemployment rate (UNRATE), CPI and core CPI, Fed funds rate, ' +
+      'yield curve 2s10s spread, and Sahm Rule recession indicator. ' +
+      'Includes a cycle phase signal (expansion/late cycle/peak/contraction). ' +
+      'Use this for macroeconomic context or recession risk assessment.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier'),
+      series:  z.record(z.string(), z.number().nullable()).describe('Current values for each macro series'),
+      derived: z.record(z.string(), z.any()).describe('Sahm Rule value and yield curve spread'),
+      signals: z.record(z.string(), z.any()).describe('Cycle phase and recession triggered flag'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/macro';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const lines = [
+        `Macro Health Snapshot (as of ${d.as_of})`,
+        '',
+        d.series.GDP !== null ? `GDP: ${d.series.GDP}` : null,
+        `Unemployment: ${d.series.UNRATE}%`,
+        d.series.CPIAUCSL !== null ? `CPI: ${d.series.CPIAUCSL}` : null,
+        d.series.CPILFESL !== null ? `Core CPI: ${d.series.CPILFESL}` : null,
+        d.series.FEDFUNDS !== null ? `Fed Funds: ${d.series.FEDFUNDS}%` : null,
+        '',
+        `Sahm Rule: ${d.derived.sahm_rule} (threshold: 0.50)`,
+        d.derived.spread_2s10s !== null ? `2s10s spread: ${d.derived.spread_2s10s}%` : null,
+        '',
+        `Cycle phase: ${d.signals.cycle_phase}`,
+        `Recession triggered: ${d.signals.recession_triggered}`,
+        '',
+        'Source: LastLook Data via FRED',
+      ].filter(x => x !== null);
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.50 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 16: G10 FX Dashboard Bundle ─────────────────────────────────────────
+server.registerTool(
+  'get_bundle_fx_dashboard',
+  {
+    title: 'Get G10 FX Dashboard Bundle',
+    description:
+      'Returns all 9 G10 FX spot rates in one call: EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK. ' +
+      'Also includes a USD strength index (average % change vs G10 basket over 30 days) and a USD trend signal. ' +
+      'Source: European Central Bank via Frankfurter.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the FX rates'),
+      bundle:  z.string().describe('Bundle identifier'),
+      series:  z.record(z.string(), z.number()).describe('All 9 G10 FX spot rates'),
+      derived: z.record(z.string(), z.any()).describe('USD strength index vs G10 basket'),
+      signals: z.record(z.string(), z.string()).describe('USD trend over 30 days'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/fx-dashboard';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const rows = Object.entries(d.series).map(([pair, rate]) => `  ${pair}: ${rate}`).join('\n');
+      const text =
+        `G10 FX Dashboard (as of ${d.as_of})\n\n${rows}\n\n` +
+        `USD Strength Index (30d): ${d.derived.usd_strength_index > 0 ? '+' : ''}${d.derived.usd_strength_index}%\n` +
+        `USD Trend: ${d.signals.usd_trend_30d}\n\n` +
+        `Source: LastLook Data via ECB`;
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.35 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 17: Energy & Commodities Bundle ─────────────────────────────────────
+server.registerTool(
+  'get_bundle_energy',
+  {
+    title: 'Get Energy & Commodities Bundle',
+    description:
+      'Returns current energy commodity prices in one call: WTI crude oil (DCOILWTICO), Brent crude (DCOILBRENTEU), ' +
+      'US regular gasoline (GASREGCOVW), and Henry Hub natural gas (DHHNGSP). ' +
+      'Includes the WTI-Brent spread and a market signal. Source: FRED.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier'),
+      series:  z.record(z.string(), z.number().nullable()).describe('Current values for each energy series'),
+      derived: z.record(z.string(), z.any()).describe('WTI-Brent spread'),
+      signals: z.record(z.string(), z.string()).describe('WTI-Brent market signal'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/energy';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const text =
+        `Energy & Commodities (as of ${d.as_of})\n\n` +
+        `WTI Crude:     $${d.series.DCOILWTICO}/bbl\n` +
+        `Brent Crude:   $${d.series.DCOILBRENTEU}/bbl\n` +
+        (d.series.GASREGCOVW !== null ? `US Gasoline:   $${d.series.GASREGCOVW}/gal\n` : '') +
+        (d.series.DHHNGSP !== null    ? `Natural Gas:   $${d.series.DHHNGSP}/MMBtu\n` : '') +
+        `\nWTI-Brent Spread: $${d.derived.wti_brent_spread}/bbl\n` +
+        `Signal: ${d.signals.wti_brent_signal}\n\n` +
+        `Source: LastLook Data via FRED`;
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.25 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 18: Economic Context Brief Bundle ────────────────────────────────────
+server.registerTool(
+  'get_bundle_context_brief',
+  {
+    title: 'Get Economic Context Brief Bundle',
+    description:
+      'Returns a pre-formatted natural-language paragraph summarizing 15+ economic indicators — rates, inflation, ' +
+      'employment, mortgage market, energy prices, and FX. The "brief" field is ready to inject directly into an LLM prompt ' +
+      'as economic context. Also returns structured series, FX, derived, and signals fields.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier'),
+      brief:   z.string().describe('Pre-formatted natural-language economic context paragraph'),
+      series:  z.record(z.string(), z.number().nullable()).describe('Current values for all FRED series in the brief'),
+      fx:      z.record(z.string(), z.number().nullable()).describe('Current FX rates included in the brief'),
+      derived: z.record(z.string(), z.any()).describe('Computed fields (spreads, Sahm Rule, etc.)'),
+      signals: z.record(z.string(), z.any()).describe('Curve shape and recession signals'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/context-brief';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      return {
+        content: [{ type: 'text', text: d.brief + '\n\nSource: LastLook Data via FRED and ECB' }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, brief: d.brief, series: d.series, fx: d.fx, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.75 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
   return server;
 }
 
@@ -618,7 +890,7 @@ if (isHTTP) {
     await transport.handleRequest(req, res);
   });
 
-  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.8.3' }));
+  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.10.0' }));
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`LastLook Data MCP server running on port ${PORT}`));

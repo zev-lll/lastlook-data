@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "LastLook Data API",
-    "version": "2.8.0",
+    "version": "2.10.0",
     "description": "Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, energy prices, macro indicators, yield curve spreads, recession signals, and economic calendar data. Pay per query via x402 protocol. No API keys or accounts required.",
     "contact": {
       "name": "LastLook Data",
@@ -29,6 +29,7 @@
     { "name": "FX", "description": "G10 FX rates via European Central Bank" },
     { "name": "Derived", "description": "Computed and interpreted market signals" },
     { "name": "Calendar", "description": "Economic data release schedule" },
+    { "name": "Bundles", "description": "Pre-built multi-series bundles — one payment, parallel data fetch" },
     { "name": "Free", "description": "No payment required" }
   ],
   "paths": {
@@ -504,6 +505,163 @@
         }
       }
     },
+    "/api/bundle/rate-environment": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Rate environment snapshot bundle",
+        "description": "Returns a complete rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 plus 2s10s and 3m10y yield curve spreads, Fed policy spread (EFFR vs IORB), and curve shape signal. One payment fetches all data in parallel.",
+        "operationId": "getBundleRateEnvironment",
+        "x-x402": { "price": "0.35", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Rate environment bundle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BundleResponse" },
+                "example": {
+                  "service": "LastLook Data", "as_of": "2026-05-29", "bundle": "rate_environment",
+                  "series": { "FEDFUNDS": 4.33, "SOFR": 4.31, "DGS2": 3.94, "DGS5": 4.01, "DGS10": 4.46, "DGS30": 4.97 },
+                  "derived": { "spread_2s10s": 0.52, "spread_3m10y": 0.18, "policy_spread": -0.07 },
+                  "signals": { "curve_shape": "Normal (upward sloping)", "policy_stance": "EFFR trading below IORB — within normal operating band" }
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/bundle/mortgage-pulse": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Mortgage market pulse bundle",
+        "description": "Returns a mortgage market snapshot: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds rate, median home price (MSPUS), housing starts (HOUST), MBS spread, and 30-day rate trend.",
+        "operationId": "getBundleMortgagePulse",
+        "x-x402": { "price": "0.40", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Mortgage market pulse bundle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BundleResponse" },
+                "example": {
+                  "service": "LastLook Data", "as_of": "2026-05-29", "bundle": "mortgage_pulse",
+                  "series": { "MORTGAGE30US": 6.86, "MORTGAGE15US": 6.12, "DGS10": 4.46, "FEDFUNDS": 4.33, "MSPUS": 412000, "HOUST": 1401 },
+                  "derived": { "mbs_spread": 2.40, "mbs_spread_label": "30yr mortgage rate minus 10Y Treasury yield" },
+                  "signals": { "rate_trend_30d": "flat" }
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/bundle/macro": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Macro health snapshot bundle",
+        "description": "Returns a macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, 2s10s yield curve spread, and Sahm Rule recession indicator. Includes cycle phase signal (expansion/late cycle/peak/contraction).",
+        "operationId": "getBundleMacro",
+        "x-x402": { "price": "0.50", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Macro health bundle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BundleResponse" },
+                "example": {
+                  "service": "LastLook Data", "as_of": "2026-05-29", "bundle": "macro",
+                  "series": { "GDP": 29350, "UNRATE": 4.2, "CPIAUCSL": 315.5, "CPILFESL": 323.8, "FEDFUNDS": 4.33 },
+                  "derived": { "sahm_rule": 0.37, "spread_2s10s": 0.52 },
+                  "signals": { "cycle_phase": "expansion", "recession_triggered": false }
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/bundle/fx-dashboard": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "G10 FX dashboard bundle",
+        "description": "Returns all 9 G10 FX spot rates plus a USD strength index (average % change vs G10 basket over 30 days) and USD trend signal. Source: European Central Bank via Frankfurter.",
+        "operationId": "getBundleFxDashboard",
+        "x-x402": { "price": "0.35", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "G10 FX dashboard bundle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BundleResponse" },
+                "example": {
+                  "service": "LastLook Data", "as_of": "2026-05-29", "bundle": "fx_dashboard",
+                  "series": { "EURUSD": 1.1345, "GBPUSD": 1.3512, "USDJPY": 142.5, "USDCHF": 0.8910, "USDCAD": 1.3621, "AUDUSD": 0.6445, "NZDUSD": 0.5987, "USDSEK": 9.82, "USDNOK": 10.28 },
+                  "derived": { "usd_strength_index": -2.18, "usd_strength_index_label": "Avg % change of USD vs G10 basket vs 30 days ago (positive = stronger)" },
+                  "signals": { "usd_trend_30d": "weakening" }
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/bundle/energy": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Energy and commodities bundle",
+        "description": "Returns current energy commodity prices: WTI crude oil (DCOILWTICO), Brent crude (DCOILBRENTEU), US regular gasoline (GASREGCOVW), and Henry Hub natural gas (DHHNGSP). Includes WTI-Brent spread and signal.",
+        "operationId": "getBundleEnergy",
+        "x-x402": { "price": "0.25", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Energy and commodities bundle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BundleResponse" },
+                "example": {
+                  "service": "LastLook Data", "as_of": "2026-05-29", "bundle": "energy",
+                  "series": { "DCOILWTICO": 61.5, "DCOILBRENTEU": 64.8, "GASREGCOVW": 3.18, "DHHNGSP": 3.82 },
+                  "derived": { "wti_brent_spread": -3.3, "wti_brent_spread_label": "WTI minus Brent crude (USD/bbl)" },
+                  "signals": { "wti_brent_signal": "Normal contango (Brent premium)" }
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
+    "/api/bundle/context-brief": {
+      "get": {
+        "tags": ["Bundles"],
+        "summary": "Economic context brief bundle",
+        "description": "Returns 15+ economic indicators plus a pre-formatted natural-language paragraph summarizing the current economic environment. The 'brief' field is ready to inject directly into an LLM system prompt for economic context.",
+        "operationId": "getBundleContextBrief",
+        "x-x402": { "price": "0.75", "currency": "USDC" },
+        "responses": {
+          "200": {
+            "description": "Economic context brief bundle",
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "LastLook Data", "as_of": "2026-05-29", "bundle": "context_brief",
+                  "brief": "As of 2026-05-29: The Fed Funds Rate is 4.33%, yield curve at +52bps (normal), 10Y Treasury at 4.46%, 30Y at 4.97%, CPI at 315.5 (2026-04-01), unemployment at 4.2%, 30yr mortgage 6.86% (240bps over 10Y), 15yr 6.12%, WTI crude $61.50/bbl, Brent $64.80/bbl, EUR/USD 1.1345, GBP/USD 1.3512, USD/JPY 142.5, Sahm Rule 0.37 (below 0.50 threshold).",
+                  "series": { "FEDFUNDS": 4.33, "DGS10": 4.46, "DGS30": 4.97, "MORTGAGE30US": 6.86, "UNRATE": 4.2, "CPIAUCSL": 315.5, "DCOILWTICO": 61.5 },
+                  "fx": { "EURUSD": 1.1345, "GBPUSD": 1.3512, "USDJPY": 142.5 },
+                  "derived": { "spread_2s10s": 0.52, "spread_2s10s_bps": 52, "mbs_spread": 2.40, "sahm_rule": 0.37 },
+                  "signals": { "curve_shape": "normal (upward sloping)", "recession_triggered": false }
+                }
+              }
+            }
+          },
+          "402": { "$ref": "#/components/responses/PaymentRequired" }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": ["Free"],
@@ -674,6 +832,18 @@
             }
           },
           "note": { "type": "string" }
+        }
+      },
+      "BundleResponse": {
+        "type": "object",
+        "properties": {
+          "service":  { "type": "string", "example": "LastLook Data" },
+          "as_of":    { "type": "string", "format": "date" },
+          "bundle":   { "type": "string", "example": "rate_environment" },
+          "series":   { "type": "object", "description": "Current values for each data series", "additionalProperties": { "type": "number", "nullable": true } },
+          "derived":  { "type": "object", "description": "Computed fields derived from the series data" },
+          "signals":  { "type": "object", "description": "Interpreted signals and flags" },
+          "note":     { "type": "string" }
         }
       },
       "Error": {

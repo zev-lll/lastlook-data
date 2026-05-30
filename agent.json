@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "name": "LastLook Data",
   "description": "Financial market data and derived market indicators for AI agents — FRED macro data, G10 FX rates, energy prices, yield curve spreads, recession signals, Fed policy spread, and economic calendar. Pay per query via x402, no accounts or API keys required.",
   "url": "https://www.lastlookdata.com",
@@ -37,7 +37,13 @@
     { "path": "/api/derived/yield-curve",   "method": "GET", "description": "2s10s and 3m10y Treasury yield curve spreads with inversion signal.", "price_usdc": 0.03 },
     { "path": "/api/derived/recession",     "method": "GET", "description": "Real-Time Sahm Rule recession indicator. Value >= 0.50 signals recession.", "price_usdc": 0.03 },
     { "path": "/api/derived/policy-spread", "method": "GET", "description": "EFFR vs IORB spread with plain-English interpretation of Fed policy stance.", "price_usdc": 0.03 },
-    { "path": "/api/calendar",              "method": "GET", "description": "Upcoming FOMC meeting date and CPI release date.", "price_usdc": 0.01 }
+    { "path": "/api/calendar",              "method": "GET", "description": "Upcoming FOMC meeting date and CPI release date.", "price_usdc": 0.01 },
+    { "path": "/api/bundle/rate-environment", "method": "GET", "description": "Rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and policy spread. One payment.", "price_usdc": 0.35 },
+    { "path": "/api/bundle/mortgage-pulse",   "method": "GET", "description": "Mortgage market pulse: 30yr/15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. MBS spread and rate trend.", "price_usdc": 0.40 },
+    { "path": "/api/bundle/macro",            "method": "GET", "description": "Macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve, Sahm Rule. Includes cycle phase signal.", "price_usdc": 0.50 },
+    { "path": "/api/bundle/fx-dashboard",     "method": "GET", "description": "G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) plus USD strength index.", "price_usdc": 0.35 },
+    { "path": "/api/bundle/energy",           "method": "GET", "description": "Energy and commodities bundle: WTI crude, Brent crude, US gasoline, Henry Hub natural gas. WTI-Brent spread included.", "price_usdc": 0.25 },
+    { "path": "/api/bundle/context-brief",    "method": "GET", "description": "Economic context brief: 15+ indicators in a pre-formatted natural-language paragraph for LLM context injection.", "price_usdc": 0.75 }
   ],
   "common_use_cases": {
     "current_iorb":          "GET /api/current?id=IORB",
@@ -74,7 +80,13 @@
     "GET /api/derived/yield-curve":   "0.03",
     "GET /api/derived/recession":     "0.03",
     "GET /api/derived/policy-spread": "0.03",
-    "GET /api/calendar":              "0.01"
+    "GET /api/calendar":              "0.01",
+    "GET /api/bundle/rate-environment": "0.35",
+    "GET /api/bundle/mortgage-pulse":   "0.40",
+    "GET /api/bundle/macro":            "0.50",
+    "GET /api/bundle/fx-dashboard":     "0.35",
+    "GET /api/bundle/energy":           "0.25",
+    "GET /api/bundle/context-brief":    "0.75"
   },
   "data_sources": {
     "fred": {

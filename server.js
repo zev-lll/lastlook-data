@@ -116,6 +116,8 @@ const PAID_PATHS = [
   '/api/fx/current', '/api/fx/date', '/api/fx/series',
   '/api/derived/yield-curve', '/api/derived/recession', '/api/derived/policy-spread',
   '/api/calendar',
+  '/api/bundle/rate-environment', '/api/bundle/mortgage-pulse', '/api/bundle/macro',
+  '/api/bundle/fx-dashboard', '/api/bundle/energy', '/api/bundle/context-brief',
 ];
 app.use((req, res, next) => {
   if (req.method === 'HEAD' && PAID_PATHS.includes(req.path)) return res.status(402).end();
@@ -307,6 +309,84 @@ app.use(
           ),
         },
       },
+
+      // ── Bundle: Rate Environment Snapshot ($0.35) ─────────────────────────────
+      'GET /api/bundle/rate-environment': {
+        accepts: [{ scheme: 'exact', price: '$0.35', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 plus yield curve spreads and policy spread. One payment, all rate data.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'rate_environment', series: { FEDFUNDS: 4.33, SOFR: 4.31, DGS2: 3.94, DGS5: 4.01, DGS10: 4.46, DGS30: 4.97 }, derived: { spread_2s10s: 0.52, spread_3m10y: 0.18, policy_spread: -0.07 }, signals: { curve_shape: 'Normal (upward sloping)', policy_stance: 'EFFR trading below IORB — within normal operating band' } },
+          ),
+        },
+      },
+
+      // ── Bundle: Mortgage Market Pulse ($0.40) ─────────────────────────────────
+      'GET /api/bundle/mortgage-pulse': {
+        accepts: [{ scheme: 'exact', price: '$0.40', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — mortgage market pulse: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'mortgage_pulse', series: { MORTGAGE30US: 6.86, MORTGAGE15US: 6.12, DGS10: 4.46, FEDFUNDS: 4.33, MSPUS: 412000, HOUST: 1401 }, derived: { mbs_spread: 2.40, mbs_spread_label: '30yr mortgage minus 10Y Treasury' }, signals: { rate_trend_30d: 'flat' } },
+          ),
+        },
+      },
+
+      // ── Bundle: Macro Health Snapshot ($0.50) ─────────────────────────────────
+      'GET /api/bundle/macro': {
+        accepts: [{ scheme: 'exact', price: '$0.50', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve spreads, and Sahm Rule recession signal. Includes cycle phase.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'macro', series: { GDP: 29350, UNRATE: 4.2, CPIAUCSL: 315.5, CPILFESL: 323.8, FEDFUNDS: 4.33 }, derived: { sahm_rule: 0.37, spread_2s10s: 0.52 }, signals: { cycle_phase: 'expansion', recession_triggered: false } },
+          ),
+        },
+      },
+
+      // ── Bundle: FX Dashboard ($0.35) ──────────────────────────────────────────
+      'GET /api/bundle/fx-dashboard': {
+        accepts: [{ scheme: 'exact', price: '$0.35', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) plus USD strength index vs basket (30d).',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'fx_dashboard', series: { EURUSD: 1.1345, GBPUSD: 1.3512, USDJPY: 142.5, USDCHF: 0.8910, USDCAD: 1.3621, AUDUSD: 0.6445, NZDUSD: 0.5987, USDSEK: 9.82, USDNOK: 10.28 }, derived: { usd_strength_index: -2.18, usd_strength_index_label: 'Avg % change of USD vs G10 basket (30d)' }, signals: { usd_trend_30d: 'weakening' } },
+          ),
+        },
+      },
+
+      // ── Bundle: Energy & Commodities ($0.25) ──────────────────────────────────
+      'GET /api/bundle/energy': {
+        accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — energy and commodities bundle: WTI crude, Brent crude, US regular gasoline, Henry Hub natural gas. Includes WTI-Brent spread and market signal.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'energy', series: { DCOILWTICO: 61.5, DCOILBRENTEU: 64.8, GASREGCOVW: 3.18, DHHNGSP: 3.82 }, derived: { wti_brent_spread: -3.3, wti_brent_spread_label: 'WTI minus Brent crude (USD/bbl)' }, signals: { wti_brent_signal: 'Normal contango (Brent premium)' } },
+          ),
+        },
+      },
+
+      // ── Bundle: Economic Context Brief ($0.75) ────────────────────────────────
+      'GET /api/bundle/context-brief': {
+        accepts: [{ scheme: 'exact', price: '$0.75', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — economic context brief: 15+ indicators across rates, inflation, employment, FX, and energy in a pre-formatted natural-language paragraph for LLM context injection.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'context_brief', brief: 'As of 2026-05-29: The Fed Funds Rate is 4.33%, the yield curve is +52bps (normal), 10Y Treasury at 4.46%, 30Y at 4.97%, CPI at 315.5, unemployment at 4.2%, 30yr mortgage rate 6.86% (240bps over 10Y), WTI crude $61.50/bbl, Brent $64.80/bbl, EUR/USD 1.1345, USD/JPY 142.5, Sahm Rule 0.37 (below 0.50 threshold).', series: { FEDFUNDS: 4.33, DGS10: 4.46, DGS30: 4.97, MORTGAGE30US: 6.86, UNRATE: 4.2, CPIAUCSL: 315.5, DCOILWTICO: 61.5 } },
+          ),
+        },
+      },
     },
     server,
   )
@@ -395,7 +475,7 @@ app.get('/', (req, res) => {
   if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
-    version: '2.9.1',
+    version: '2.10.0',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -420,6 +500,12 @@ app.get('/', (req, res) => {
       { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/recession',     description: 'Real-Time Sahm Rule recession indicator — current value, threshold, triggered flag, and signal.',                                                        price: '0.03', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/policy-spread', description: 'Fed policy spread — EFFR vs IORB with interpretation of monetary policy stance.',                                                                        price: '0.03', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/calendar',     description: 'Upcoming economic events — next FOMC meeting date and CPI release date.',                                                                                         price: '0.01', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/rate-environment', description: 'Rate environment snapshot — FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and policy spread. One payment, all rate data.',                  price: '0.35', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/mortgage-pulse',   description: 'Mortgage market pulse — 30yr/15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',           price: '0.40', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/macro',            description: 'Macro health snapshot — GDP, unemployment, CPI, core CPI, Fed funds, yield curve, and Sahm Rule recession signal with cycle phase interpretation.',             price: '0.50', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/fx-dashboard',     description: 'G10 FX dashboard — all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) with USD strength index vs basket (30d).',      price: '0.35', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/energy',           description: 'Energy and commodities bundle — WTI crude, Brent crude, US gasoline, Henry Hub natural gas with WTI-Brent spread and market signal.',                         price: '0.25', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/context-brief',    description: 'Economic context brief — 15+ indicators in a pre-formatted natural-language paragraph ready for LLM context injection. Covers rates, inflation, FX, energy.',  price: '0.75', currency: 'USDC' },
     ],
     supported_series: {
       treasury:        ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
@@ -432,7 +518,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.9.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.10.0' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
@@ -598,6 +684,60 @@ app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json(
       currency: 'USDC',
       pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { days: { type: 'string', description: 'Lookahead window', enum: ['30','60','90'] } },
+    },
+    {
+      name: 'Bundle — Rate Environment Snapshot',
+      url: 'https://api.lastlookdata.com/api/bundle/rate-environment',
+      method: 'GET',
+      description: 'Rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and Fed policy spread. One payment.',
+      price: '0.35',
+      currency: 'USDC',
+      pricing: { amount: '0.35', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Bundle — Mortgage Market Pulse',
+      url: 'https://api.lastlookdata.com/api/bundle/mortgage-pulse',
+      method: 'GET',
+      description: 'Mortgage market pulse: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',
+      price: '0.40',
+      currency: 'USDC',
+      pricing: { amount: '0.40', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Bundle — Macro Health Snapshot',
+      url: 'https://api.lastlookdata.com/api/bundle/macro',
+      method: 'GET',
+      description: 'Macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve, and Sahm Rule with cycle phase interpretation.',
+      price: '0.50',
+      currency: 'USDC',
+      pricing: { amount: '0.50', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Bundle — G10 FX Dashboard',
+      url: 'https://api.lastlookdata.com/api/bundle/fx-dashboard',
+      method: 'GET',
+      description: 'G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) with USD strength index vs basket.',
+      price: '0.35',
+      currency: 'USDC',
+      pricing: { amount: '0.35', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Bundle — Energy & Commodities',
+      url: 'https://api.lastlookdata.com/api/bundle/energy',
+      method: 'GET',
+      description: 'Energy and commodities bundle: WTI crude, Brent crude, US regular gasoline, Henry Hub natural gas. Includes WTI-Brent spread.',
+      price: '0.25',
+      currency: 'USDC',
+      pricing: { amount: '0.25', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Bundle — Economic Context Brief',
+      url: 'https://api.lastlookdata.com/api/bundle/context-brief',
+      method: 'GET',
+      description: '15+ indicators across rates, inflation, employment, FX, and energy in a pre-formatted natural-language paragraph for LLM context injection.',
+      price: '0.75',
+      currency: 'USDC',
+      pricing: { amount: '0.75', currency: 'USDC', network: 'Base', scheme: 'exact' },
     },
   ],
 }));
@@ -872,6 +1012,319 @@ app.get('/api/calendar', async (req, res) => {
     cache.set(cacheKey, result, 3600);
     res.json(result);
   } catch (err) { res.status(500).json({ error: 'Failed to fetch calendar', detail: err.message }); }
+});
+
+// ── Bundle: Rate Environment Snapshot ────────────────────────────────────────
+
+app.get('/api/bundle/rate-environment', async (req, res) => {
+  try {
+    const start = daysAgoISO(30), end = todayISO();
+    const [fedfunds, sofr, dgs2, dgs5, dgs10, dgs30, effr, iorb, dgs1mo] = await Promise.all([
+      fetchFredSeries('FEDFUNDS', start, end),
+      fetchFredSeries('SOFR',     start, end),
+      fetchFredSeries('DGS2',     start, end),
+      fetchFredSeries('DGS5',     start, end),
+      fetchFredSeries('DGS10',    start, end),
+      fetchFredSeries('DGS30',    start, end),
+      fetchFredSeries('EFFR',     start, end),
+      fetchFredSeries('IORB',     start, end),
+      fetchFredSeries('DGS1MO',   start, end),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lDgs2 = l(dgs2), lDgs10 = l(dgs10), lDgs30 = l(dgs30);
+    const lDgs1mo = l(dgs1mo), lEffr = l(effr), lIorb = l(iorb);
+    if (!lDgs2 || !lDgs10 || !lDgs30) return res.status(404).json({ error: 'Insufficient data' });
+    const spread2s10s  = parseFloat((lDgs10.value - lDgs2.value).toFixed(4));
+    const spread3m10y  = lDgs1mo ? parseFloat((lDgs10.value - lDgs1mo.value).toFixed(4)) : null;
+    const policySpread = lEffr && lIorb ? parseFloat((lEffr.value - lIorb.value).toFixed(4)) : null;
+    const inv2 = spread2s10s < 0, inv3m = spread3m10y !== null && spread3m10y < 0;
+    const curveShape = inv2 && inv3m ? 'Fully inverted' : inv2 || inv3m ? 'Partially inverted' : 'Normal (upward sloping)';
+    const policyStance = policySpread === null ? 'N/A'
+      : policySpread < 0 ? 'EFFR trading below IORB — within normal operating band'
+      : policySpread === 0 ? 'EFFR at IORB — at floor'
+      : 'EFFR trading above IORB — unusual, monitor for reserve scarcity';
+    res.json({
+      service: 'LastLook Data', as_of: lDgs10.date, bundle: 'rate_environment',
+      series: {
+        FEDFUNDS: l(fedfunds)?.value ?? null,
+        SOFR:     l(sofr)?.value ?? null,
+        DGS2:     lDgs2.value,
+        DGS5:     l(dgs5)?.value ?? null,
+        DGS10:    lDgs10.value,
+        DGS30:    lDgs30.value,
+      },
+      derived: {
+        spread_2s10s:        spread2s10s,
+        spread_2s10s_label:  '10Y minus 2Y Treasury',
+        spread_3m10y:        spread3m10y,
+        spread_3m10y_label:  '10Y minus 3-Month T-Bill',
+        policy_spread:       policySpread,
+        policy_spread_label: 'EFFR minus IORB',
+      },
+      signals: { curve_shape: curveShape, policy_stance: policyStance },
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch rate environment bundle', detail: err.message }); }
+});
+
+// ── Bundle: Mortgage Market Pulse ─────────────────────────────────────────────
+
+app.get('/api/bundle/mortgage-pulse', async (req, res) => {
+  try {
+    const end = todayISO();
+    const [mort30, mort15, dgs10, fedfunds, mspus, houst] = await Promise.all([
+      fetchFredSeries('MORTGAGE30US', daysAgoISO(45), end),
+      fetchFredSeries('MORTGAGE15US', daysAgoISO(45), end),
+      fetchFredSeries('DGS10',        daysAgoISO(10), end),
+      fetchFredSeries('FEDFUNDS',     daysAgoISO(10), end),
+      fetchFredSeries('MSPUS',        daysAgoISO(120), end),
+      fetchFredSeries('HOUST',        daysAgoISO(90), end),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lMort30 = l(mort30), lMort15 = l(mort15), lDgs10 = l(dgs10);
+    if (!lMort30 || !lDgs10) return res.status(404).json({ error: 'Insufficient data' });
+    const mbsSpread = parseFloat((lMort30.value - lDgs10.value).toFixed(4));
+    const cutoff30d = daysAgoISO(28);
+    const ref30d = mort30.find(o => o.date >= cutoff30d) ?? mort30[0];
+    const diff = lMort30.value - ref30d.value;
+    const rateTrend = diff > 0.1 ? 'rising' : diff < -0.1 ? 'falling' : 'flat';
+    res.json({
+      service: 'LastLook Data', as_of: lMort30.date, bundle: 'mortgage_pulse',
+      series: {
+        MORTGAGE30US: lMort30.value,
+        MORTGAGE15US: lMort15?.value ?? null,
+        DGS10:        lDgs10.value,
+        FEDFUNDS:     l(fedfunds)?.value ?? null,
+        MSPUS:        l(mspus)?.value ?? null,
+        HOUST:        l(houst)?.value ?? null,
+      },
+      derived: {
+        mbs_spread:       mbsSpread,
+        mbs_spread_label: '30yr mortgage rate minus 10Y Treasury yield',
+      },
+      signals: { rate_trend_30d: rateTrend },
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch mortgage pulse bundle', detail: err.message }); }
+});
+
+// ── Bundle: Macro Health Snapshot ─────────────────────────────────────────────
+
+app.get('/api/bundle/macro', async (req, res) => {
+  try {
+    const end = todayISO();
+    const [gdp, unrate, cpi, cpilf, fedfunds, sahm, dgs2, dgs10, dgs1mo] = await Promise.all([
+      fetchFredSeries('GDP',          daysAgoISO(180), end),
+      fetchFredSeries('UNRATE',       daysAgoISO(90),  end),
+      fetchFredSeries('CPIAUCSL',     daysAgoISO(90),  end),
+      fetchFredSeries('CPILFESL',     daysAgoISO(90),  end),
+      fetchFredSeries('FEDFUNDS',     daysAgoISO(10),  end),
+      fetchFredSeries('SAHMREALTIME', daysAgoISO(60),  end),
+      fetchFredSeries('DGS2',         daysAgoISO(10),  end),
+      fetchFredSeries('DGS10',        daysAgoISO(10),  end),
+      fetchFredSeries('DGS1MO',       daysAgoISO(10),  end),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lUnrate = l(unrate), lCpi = l(cpi), lDgs2 = l(dgs2), lDgs10 = l(dgs10);
+    const lSahm = l(sahm);
+    if (!lUnrate || !lCpi) return res.status(404).json({ error: 'Insufficient macro data' });
+    const recessionTriggered = lSahm ? lSahm.value >= 0.50 : null;
+    const spread2s10s = lDgs2 && lDgs10 ? parseFloat((lDgs10.value - lDgs2.value).toFixed(4)) : null;
+    let cyclePhase = 'expansion';
+    if (recessionTriggered) cyclePhase = 'contraction';
+    else if (spread2s10s !== null && spread2s10s < 0 && lSahm && lSahm.value > 0.25) cyclePhase = 'peak';
+    else if (spread2s10s !== null && spread2s10s < 0) cyclePhase = 'late cycle';
+    res.json({
+      service: 'LastLook Data', as_of: lUnrate.date, bundle: 'macro',
+      series: {
+        GDP:      l(gdp)?.value ?? null,
+        UNRATE:   lUnrate.value,
+        CPIAUCSL: lCpi.value,
+        CPILFESL: l(cpilf)?.value ?? null,
+        FEDFUNDS: l(fedfunds)?.value ?? null,
+      },
+      derived: {
+        sahm_rule:    lSahm?.value ?? null,
+        spread_2s10s: spread2s10s,
+      },
+      signals: { cycle_phase: cyclePhase, recession_triggered: recessionTriggered },
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch macro bundle', detail: err.message }); }
+});
+
+// ── Bundle: G10 FX Dashboard ──────────────────────────────────────────────────
+
+app.get('/api/bundle/fx-dashboard', async (req, res) => {
+  try {
+    const thirtyDaysAgo = daysAgoISO(30);
+    const [currentResp, pastResp] = await Promise.all([
+      axios.get('https://api.frankfurter.app/latest', { params: { from: 'USD', to: 'EUR,GBP,JPY,CHF,CAD,AUD,NZD,SEK,NOK' } }),
+      axios.get(`https://api.frankfurter.app/${thirtyDaysAgo}`, { params: { from: 'USD', to: 'EUR,GBP,JPY,CHF,CAD,AUD,NZD,SEK,NOK' } }),
+    ]);
+    const cr = currentResp.data.rates, pr = pastResp.data.rates;
+    const asOf = currentResp.data.date;
+    const round = (n, d) => parseFloat(n.toFixed(d));
+    const series = {
+      EURUSD: round(1 / cr.EUR, 5),
+      GBPUSD: round(1 / cr.GBP, 5),
+      USDJPY: round(cr.JPY, 3),
+      USDCHF: round(cr.CHF, 5),
+      USDCAD: round(cr.CAD, 5),
+      AUDUSD: round(1 / cr.AUD, 5),
+      NZDUSD: round(1 / cr.NZD, 5),
+      USDSEK: round(cr.SEK, 4),
+      USDNOK: round(cr.NOK, 4),
+    };
+    // Positive = USD bought more foreign currency vs 30d ago = USD stronger
+    const currencies = ['EUR','GBP','JPY','CHF','CAD','AUD','NZD','SEK','NOK'];
+    const changes = currencies.map(c => (cr[c] - pr[c]) / pr[c] * 100);
+    const usdStrengthIndex = round(changes.reduce((a, b) => a + b, 0) / changes.length, 3);
+    const usdTrend = usdStrengthIndex > 0.5 ? 'strengthening' : usdStrengthIndex < -0.5 ? 'weakening' : 'stable';
+    res.json({
+      service: 'LastLook Data', as_of: asOf, bundle: 'fx_dashboard',
+      series,
+      derived: {
+        usd_strength_index:       usdStrengthIndex,
+        usd_strength_index_label: 'Avg % change of USD vs G10 basket vs 30 days ago (positive = stronger)',
+      },
+      signals: { usd_trend_30d: usdTrend },
+      note: 'Source: Frankfurter (European Central Bank)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch FX dashboard bundle', detail: err.message }); }
+});
+
+// ── Bundle: Energy & Commodities ──────────────────────────────────────────────
+
+app.get('/api/bundle/energy', async (req, res) => {
+  try {
+    const start = daysAgoISO(20), end = todayISO();
+    const [wti, brent, gas, natgas] = await Promise.all([
+      fetchFredSeries('DCOILWTICO',   start, end),
+      fetchFredSeries('DCOILBRENTEU', start, end),
+      fetchFredSeries('GASREGCOVW',   start, end),
+      fetchFredSeries('DHHNGSP',      start, end),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lWti = l(wti), lBrent = l(brent), lGas = l(gas), lNatgas = l(natgas);
+    if (!lWti || !lBrent) return res.status(404).json({ error: 'Insufficient energy data' });
+    const spread = parseFloat((lWti.value - lBrent.value).toFixed(3));
+    const wtiPremium = spread > 0;
+    const wtiSignal = wtiPremium ? 'WTI premium (unusual — monitor for US supply disruption)'
+      : Math.abs(spread) < 1 ? 'Near parity (converging)'
+      : 'Normal contango (Brent premium)';
+    res.json({
+      service: 'LastLook Data', as_of: lWti.date, bundle: 'energy',
+      series: {
+        DCOILWTICO:   lWti.value,
+        DCOILBRENTEU: lBrent.value,
+        GASREGCOVW:   lGas?.value ?? null,
+        DHHNGSP:      lNatgas?.value ?? null,
+      },
+      derived: {
+        wti_brent_spread:       spread,
+        wti_brent_spread_label: 'WTI minus Brent crude (USD/bbl)',
+      },
+      signals: { wti_brent_signal: wtiSignal },
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED)',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch energy bundle', detail: err.message }); }
+});
+
+// ── Bundle: Economic Context Brief ───────────────────────────────────────────
+
+app.get('/api/bundle/context-brief', async (req, res) => {
+  try {
+    const end = todayISO();
+    const [fedfunds, dgs2, dgs5, dgs10, dgs30, effr, iorb, dgs1mo,
+           mort30, mort15, unrate, cpi, cpilf, sahm,
+           wti, brent, natgas, fxResp] = await Promise.all([
+      fetchFredSeries('FEDFUNDS',     daysAgoISO(10),  end),
+      fetchFredSeries('DGS2',         daysAgoISO(10),  end),
+      fetchFredSeries('DGS5',         daysAgoISO(10),  end),
+      fetchFredSeries('DGS10',        daysAgoISO(10),  end),
+      fetchFredSeries('DGS30',        daysAgoISO(10),  end),
+      fetchFredSeries('EFFR',         daysAgoISO(10),  end),
+      fetchFredSeries('IORB',         daysAgoISO(10),  end),
+      fetchFredSeries('DGS1MO',       daysAgoISO(10),  end),
+      fetchFredSeries('MORTGAGE30US', daysAgoISO(14),  end),
+      fetchFredSeries('MORTGAGE15US', daysAgoISO(14),  end),
+      fetchFredSeries('UNRATE',       daysAgoISO(90),  end),
+      fetchFredSeries('CPIAUCSL',     daysAgoISO(90),  end),
+      fetchFredSeries('CPILFESL',     daysAgoISO(90),  end),
+      fetchFredSeries('SAHMREALTIME', daysAgoISO(60),  end),
+      fetchFredSeries('DCOILWTICO',   daysAgoISO(10),  end),
+      fetchFredSeries('DCOILBRENTEU', daysAgoISO(10),  end),
+      fetchFredSeries('DHHNGSP',      daysAgoISO(14),  end),
+      axios.get('https://api.frankfurter.app/latest', { params: { from: 'USD', to: 'EUR,GBP,JPY' } }),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lFf = l(fedfunds), lDgs2 = l(dgs2), lDgs10 = l(dgs10), lDgs30 = l(dgs30);
+    const lDgs1mo = l(dgs1mo), lEffr = l(effr), lIorb = l(iorb);
+    const lMort30 = l(mort30), lMort15 = l(mort15);
+    const lUnrate = l(unrate), lCpi = l(cpi), lCpilf = l(cpilf), lSahm = l(sahm);
+    const lWti = l(wti), lBrent = l(brent), lNatgas = l(natgas);
+    const fxRates = fxResp.data.rates;
+    if (!lDgs10 || !lUnrate) return res.status(404).json({ error: 'Insufficient data for context brief' });
+    const spread2s10s = lDgs2 ? parseFloat((lDgs10.value - lDgs2.value).toFixed(2)) : null;
+    const spread2s10sBps = spread2s10s !== null ? Math.round(spread2s10s * 100) : null;
+    const mbsSpread = lMort30 ? parseFloat((lMort30.value - lDgs10.value).toFixed(2)) : null;
+    const eurusd = fxRates.EUR ? parseFloat((1 / fxRates.EUR).toFixed(4)) : null;
+    const gbpusd = fxRates.GBP ? parseFloat((1 / fxRates.GBP).toFixed(4)) : null;
+    const usdjpy = fxRates.JPY ? parseFloat(fxRates.JPY.toFixed(2)) : null;
+    const sahmVal = lSahm?.value ?? null;
+    const recessionTriggered = sahmVal !== null ? sahmVal >= 0.50 : null;
+    const curveShape = spread2s10s === null ? 'unknown'
+      : spread2s10s < -0.25 ? 'deeply inverted' : spread2s10s < 0 ? 'inverted'
+      : spread2s10s < 0.25 ? 'flat' : 'normal (upward sloping)';
+    const asOf = lDgs10.date;
+    const parts = [];
+    if (lFf)     parts.push(`The Fed Funds Rate is ${lFf.value}%`);
+    if (spread2s10s !== null) parts.push(`yield curve at ${spread2s10sBps > 0 ? '+' : ''}${spread2s10sBps}bps (${curveShape})`);
+    if (lDgs10)  parts.push(`10Y Treasury at ${lDgs10.value}%`);
+    if (lDgs30)  parts.push(`30Y at ${lDgs30.value}%`);
+    if (lCpi)    parts.push(`CPI at ${lCpi.value} (${lCpi.date})`);
+    if (lUnrate) parts.push(`unemployment at ${lUnrate.value}%`);
+    if (lMort30) parts.push(`30yr mortgage ${lMort30.value}%${mbsSpread !== null ? ` (${Math.round(mbsSpread * 100)}bps over 10Y)` : ''}`);
+    if (lMort15) parts.push(`15yr ${lMort15.value}%`);
+    if (lWti)    parts.push(`WTI crude $${lWti.value}/bbl`);
+    if (lBrent)  parts.push(`Brent $${lBrent.value}/bbl`);
+    if (eurusd)  parts.push(`EUR/USD ${eurusd}`);
+    if (gbpusd)  parts.push(`GBP/USD ${gbpusd}`);
+    if (usdjpy)  parts.push(`USD/JPY ${usdjpy}`);
+    if (sahmVal !== null) parts.push(`Sahm Rule ${sahmVal} (${recessionTriggered ? 'recession signal TRIGGERED' : 'below 0.50 threshold'})`);
+    const brief = `As of ${asOf}: ` + parts.join(', ') + '.';
+    const seriesMap = {};
+    if (lFf)     seriesMap.FEDFUNDS     = lFf.value;
+    if (lEffr)   seriesMap.EFFR         = lEffr.value;
+    if (lIorb)   seriesMap.IORB         = lIorb.value;
+    if (lDgs2)   seriesMap.DGS2         = lDgs2.value;
+    if (l(dgs5)) seriesMap.DGS5         = l(dgs5).value;
+    if (lDgs10)  seriesMap.DGS10        = lDgs10.value;
+    if (lDgs30)  seriesMap.DGS30        = lDgs30.value;
+    if (lMort30) seriesMap.MORTGAGE30US = lMort30.value;
+    if (lMort15) seriesMap.MORTGAGE15US = lMort15.value;
+    if (lUnrate) seriesMap.UNRATE       = lUnrate.value;
+    if (lCpi)    seriesMap.CPIAUCSL     = lCpi.value;
+    if (lCpilf)  seriesMap.CPILFESL     = lCpilf.value;
+    if (lWti)    seriesMap.DCOILWTICO   = lWti.value;
+    if (lBrent)  seriesMap.DCOILBRENTEU = lBrent.value;
+    if (lNatgas) seriesMap.DHHNGSP      = lNatgas.value;
+    res.json({
+      service: 'LastLook Data', as_of: asOf, bundle: 'context_brief',
+      brief,
+      series: seriesMap,
+      fx: { EURUSD: eurusd, GBPUSD: gbpusd, USDJPY: usdjpy },
+      derived: {
+        spread_2s10s:     spread2s10s,
+        spread_2s10s_bps: spread2s10sBps,
+        mbs_spread:       mbsSpread,
+        sahm_rule:        sahmVal,
+      },
+      signals: { curve_shape: curveShape, recession_triggered: recessionTriggered },
+      note: 'Source: FRED and ECB (Frankfurter) via LastLook Data',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to generate context brief', detail: err.message }); }
 });
 
 app.listen(PORT, () => console.log(`LastLook Data running on port ${PORT}`));
