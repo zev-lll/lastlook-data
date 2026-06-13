@@ -592,7 +592,79 @@ server.registerTool(
   }
 );
 
-// ── Tool 13: Rate Environment Bundle ─────────────────────────────────────────
+// ── Tool 13: Refi Signal Bundle ───────────────────────────────────────────────
+server.registerTool(
+  'get_bundle_refi_signal',
+  {
+    title: 'Get Refinance Signal Bundle',
+    description:
+      'Returns a refinance signal bundle: current 30yr and 15yr mortgage rates, 52-week high/low range, ' +
+      'MBS spread over 10Y Treasury, 30-day and 90-day rate trend, and a refi break-even threshold. ' +
+      'The refi_breakeven_threshold field directly answers "what rate does a borrower need to have to benefit from refinancing today?" ' +
+      'Priced at $0.60 USDC via x402 on Base.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier: refi_signal'),
+      series:  z.record(z.string(), z.number().nullable()).describe('MORTGAGE30US, MORTGAGE15US, DGS10, FEDFUNDS'),
+      derived: z.record(z.string(), z.any()).describe('mbs_spread, week52_high, week52_low, week52_position_pct, refi_breakeven_threshold'),
+      signals: z.record(z.string(), z.string().nullable()).describe('rate_trend_30d, rate_trend_90d, rate_vs_52wk, refi_environment'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/refi-signal';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const summary = `Refi Signal (${d.as_of}): 30yr rate ${d.series?.MORTGAGE30US}%, 52wk range ${d.derived?.week52_low}–${d.derived?.week52_high}%. Refi break-even threshold: ${d.derived?.refi_breakeven_threshold}%. Environment: ${d.signals?.refi_environment}. Trend (30d): ${d.signals?.rate_trend_30d}.`;
+      return {
+        content: [{ type: 'text', text: summary + '\n\nSource: LastLook Data via FRED' }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.60 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 14: Purchase Market Bundle ──────────────────────────────────────────
+server.registerTool(
+  'get_bundle_purchase_market',
+  {
+    title: 'Get Home Purchase Market Bundle',
+    description:
+      'Returns a home purchase market bundle: current 30yr mortgage rate, median US home sale price (MSPUS), ' +
+      'estimated monthly P&I payment on the median home assuming 20% down, annual income required to qualify at 28% DTI, ' +
+      'affordability level signal, and housing starts. Directly answers "can my client afford a home today?" ' +
+      'Priced at $0.60 USDC via x402 on Base.',
+    inputSchema: {},
+    outputSchema: {
+      as_of:   z.string().describe('Date of the most recent underlying data'),
+      bundle:  z.string().describe('Bundle identifier: purchase_market'),
+      series:  z.record(z.string(), z.number().nullable()).describe('MORTGAGE30US, MSPUS, HOUST, FEDFUNDS'),
+      derived: z.record(z.string(), z.any()).describe('loan_amount, monthly_payment_estimate, income_required_28pct, home_price_change_qoq'),
+      signals: z.record(z.string(), z.string().nullable()).describe('affordability_level (elevated/moderate/accessible), market_activity (strong/moderate/subdued)'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/purchase-market';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const summary = `Purchase Market (${d.as_of}): 30yr rate ${d.series?.MORTGAGE30US}%, median home $${d.series?.MSPUS?.toLocaleString()}. Monthly P&I on median home: $${d.derived?.monthly_payment_estimate?.toLocaleString()}. Income required (28% DTI): $${d.derived?.income_required_28pct?.toLocaleString()}/yr. Affordability: ${d.signals?.affordability_level}.`;
+      return {
+        content: [{ type: 'text', text: summary + '\n\nSource: LastLook Data via FRED' }],
+        structuredContent: { as_of: d.as_of, bundle: d.bundle, series: d.series, derived: d.derived, signals: d.signals },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.60 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 15: Rate Environment Bundle ─────────────────────────────────────────
 server.registerTool(
   'get_bundle_rate_environment',
   {
@@ -641,7 +713,7 @@ server.registerTool(
   }
 );
 
-// ── Tool 14: Mortgage Market Pulse Bundle ────────────────────────────────────
+// ── Tool 16: Mortgage Market Pulse Bundle ────────────────────────────────────
 server.registerTool(
   'get_bundle_mortgage_pulse',
   {
@@ -693,7 +765,7 @@ server.registerTool(
   }
 );
 
-// ── Tool 15: Macro Health Bundle ─────────────────────────────────────────────
+// ── Tool 17: Macro Health Bundle ─────────────────────────────────────────────
 server.registerTool(
   'get_bundle_macro',
   {
@@ -745,7 +817,7 @@ server.registerTool(
   }
 );
 
-// ── Tool 16: G10 FX Dashboard Bundle ─────────────────────────────────────────
+// ── Tool 18: G10 FX Dashboard Bundle ─────────────────────────────────────────
 server.registerTool(
   'get_bundle_fx_dashboard',
   {
@@ -785,7 +857,7 @@ server.registerTool(
   }
 );
 
-// ── Tool 17: Energy & Commodities Bundle ─────────────────────────────────────
+// ── Tool 19: Energy & Commodities Bundle ─────────────────────────────────────
 server.registerTool(
   'get_bundle_energy',
   {
@@ -828,7 +900,7 @@ server.registerTool(
   }
 );
 
-// ── Tool 18: Economic Context Brief Bundle ────────────────────────────────────
+// ── Tool 20: Economic Context Brief Bundle ────────────────────────────────────
 server.registerTool(
   'get_bundle_context_brief',
   {

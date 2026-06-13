@@ -118,6 +118,7 @@ const PAID_PATHS = [
   '/api/calendar',
   '/api/bundle/rate-environment', '/api/bundle/mortgage-pulse', '/api/bundle/macro',
   '/api/bundle/fx-dashboard', '/api/bundle/energy', '/api/bundle/context-brief',
+  '/api/bundle/refi-signal', '/api/bundle/purchase-market',
 ];
 app.use((req, res, next) => {
   if (req.method === 'HEAD' && PAID_PATHS.includes(req.path)) return res.status(402).end();
@@ -310,6 +311,32 @@ app.use(
         },
       },
 
+      // ── Bundle: Refi Signal ($0.60) ───────────────────────────────────────────
+      'GET /api/bundle/refi-signal': {
+        accepts: [{ scheme: 'exact', price: '$0.60', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — refinance signal bundle: current 30yr and 15yr mortgage rates, 52-week range, MBS spread, rate trend, and refi break-even threshold. Tells an AI agent whether a borrower should consider refinancing.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'refi_signal', series: { MORTGAGE30US: 6.86, MORTGAGE15US: 6.12, DGS10: 4.46, FEDFUNDS: 4.33 }, derived: { mbs_spread: 2.40, week52_high: 7.22, week52_low: 6.41, week52_position_pct: 63, refi_breakeven_threshold: 7.61, refi_breakeven_label: 'Borrowers with existing rates above this level likely benefit from refinancing' }, signals: { rate_trend_30d: 'flat', rate_trend_90d: 'falling', rate_vs_52wk: 'mid_range', refi_environment: 'neutral' } },
+          ),
+        },
+      },
+
+      // ── Bundle: Purchase Market ($0.60) ───────────────────────────────────────
+      'GET /api/bundle/purchase-market': {
+        accepts: [{ scheme: 'exact', price: '$0.60', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — home purchase market bundle: current mortgage rate, median sale price, monthly payment estimate, income required to qualify, and affordability level. Directly answers whether a buyer can afford a median home.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'purchase_market', series: { MORTGAGE30US: 6.86, MSPUS: 419700, HOUST: 1378, FEDFUNDS: 4.33 }, derived: { loan_amount: 335760, monthly_payment_estimate: 2213, income_required_28pct: 94843, home_price_change_qoq: 2.1 }, signals: { affordability_level: 'elevated', market_activity: 'moderate' } },
+          ),
+        },
+      },
+
       // ── Bundle: Rate Environment Snapshot ($0.35) ─────────────────────────────
       'GET /api/bundle/rate-environment': {
         accepts: [{ scheme: 'exact', price: '$0.35', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
@@ -459,6 +486,13 @@ async function fetchFXSeries(pair, days) {
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
+function calcMonthlyPayment(principal, annualRatePct, termYears = 30) {
+  const r = annualRatePct / 100 / 12;
+  const n = termYears * 12;
+  if (r === 0) return Math.round(principal / n);
+  return Math.round(principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1));
+}
+
 function daysAgoISO(days) {
   const d = new Date();
   d.setDate(d.getDate() - days);
@@ -475,7 +509,7 @@ app.get('/', (req, res) => {
   if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
-    version: '2.10.0',
+    version: '2.11.0',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -500,6 +534,8 @@ app.get('/', (req, res) => {
       { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/recession',     description: 'Real-Time Sahm Rule recession indicator — current value, threshold, triggered flag, and signal.',                                                        price: '0.03', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/policy-spread', description: 'Fed policy spread — EFFR vs IORB with interpretation of monetary policy stance.',                                                                        price: '0.03', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/calendar',     description: 'Upcoming economic events — next FOMC meeting date and CPI release date.',                                                                                         price: '0.01', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/refi-signal',       description: 'Refinance signal — current 30yr/15yr rates, 52-week range, MBS spread, rate trend, and refi break-even threshold. Tells an AI agent whether a borrower should consider refinancing.',  price: '0.60', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/purchase-market',  description: 'Home purchase market — median sale price, monthly payment estimate on median home (20% down), income required to qualify at 28% DTI, affordability level, housing starts.',      price: '0.60', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/rate-environment', description: 'Rate environment snapshot — FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and policy spread. One payment, all rate data.',                  price: '0.35', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/mortgage-pulse',   description: 'Mortgage market pulse — 30yr/15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',           price: '0.40', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/macro',            description: 'Macro health snapshot — GDP, unemployment, CPI, core CPI, Fed funds, yield curve, and Sahm Rule recession signal with cycle phase interpretation.',             price: '0.50', currency: 'USDC' },
@@ -518,7 +554,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.10.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.11.0' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
@@ -684,6 +720,24 @@ app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json(
       currency: 'USDC',
       pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
       schema: { days: { type: 'string', description: 'Lookahead window', enum: ['30','60','90'] } },
+    },
+    {
+      name: 'Bundle — Refi Signal',
+      url: 'https://api.lastlookdata.com/api/bundle/refi-signal',
+      method: 'GET',
+      description: 'Refinance signal: current 30yr/15yr mortgage rates, 52-week high/low, MBS spread, rate trend, and refi break-even threshold. Answers whether a borrower should consider refinancing.',
+      price: '0.60',
+      currency: 'USDC',
+      pricing: { amount: '0.60', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Bundle — Purchase Market',
+      url: 'https://api.lastlookdata.com/api/bundle/purchase-market',
+      method: 'GET',
+      description: 'Home purchase market: median sale price, monthly P&I payment estimate on median home (20% down), annual income required at 28% DTI, affordability level, and housing starts.',
+      price: '0.60',
+      currency: 'USDC',
+      pricing: { amount: '0.60', currency: 'USDC', network: 'Base', scheme: 'exact' },
     },
     {
       name: 'Bundle — Rate Environment Snapshot',
@@ -1325,6 +1379,131 @@ app.get('/api/bundle/context-brief', async (req, res) => {
       note: 'Source: FRED and ECB (Frankfurter) via LastLook Data',
     });
   } catch (err) { res.status(500).json({ error: 'Failed to generate context brief', detail: err.message }); }
+});
+
+// ── Bundle: Refi Signal ───────────────────────────────────────────────────────
+
+app.get('/api/bundle/refi-signal', async (req, res) => {
+  try {
+    const end = todayISO();
+    const [mort30year, mort15, dgs10, fedfunds] = await Promise.all([
+      fetchFredSeries('MORTGAGE30US', daysAgoISO(370), end),
+      fetchFredSeries('MORTGAGE15US', daysAgoISO(45),  end),
+      fetchFredSeries('DGS10',        daysAgoISO(10),  end),
+      fetchFredSeries('FEDFUNDS',     daysAgoISO(10),  end),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lMort30 = l(mort30year), lMort15 = l(mort15), lDgs10 = l(dgs10);
+    if (!lMort30 || !lDgs10) return res.status(404).json({ error: 'Insufficient mortgage data' });
+
+    const mbsSpread = parseFloat((lMort30.value - lDgs10.value).toFixed(4));
+
+    const values30 = mort30year.map(o => o.value);
+    const week52High = parseFloat(Math.max(...values30).toFixed(2));
+    const week52Low  = parseFloat(Math.min(...values30).toFixed(2));
+    const week52Range = week52High - week52Low;
+    const week52PositionPct = week52Range > 0
+      ? Math.round((lMort30.value - week52Low) / week52Range * 100) : 50;
+
+    const refiBtThreshold = parseFloat((lMort30.value + 0.75).toFixed(2));
+
+    const cutoff30d = daysAgoISO(30), cutoff90d = daysAgoISO(90);
+    const ref30d = mort30year.find(o => o.date >= cutoff30d) ?? mort30year[0];
+    const ref90d = mort30year.find(o => o.date >= cutoff90d) ?? mort30year[0];
+    const diff30 = lMort30.value - ref30d.value;
+    const diff90 = lMort30.value - ref90d.value;
+    const trend30 = diff30 > 0.1 ? 'rising' : diff30 < -0.1 ? 'falling' : 'flat';
+    const trend90 = diff90 > 0.2 ? 'rising' : diff90 < -0.2 ? 'falling' : 'flat';
+
+    const rateVs52wk = week52PositionPct >= 80 ? 'near_52wk_high'
+      : week52PositionPct <= 20 ? 'near_52wk_low' : 'mid_range';
+    const refiEnv = trend30 === 'falling' && rateVs52wk !== 'near_52wk_high' ? 'favorable'
+      : trend30 === 'rising' && rateVs52wk !== 'near_52wk_low' ? 'unfavorable' : 'neutral';
+
+    res.json({
+      service: 'LastLook Data', as_of: lMort30.date, bundle: 'refi_signal',
+      series: {
+        MORTGAGE30US: lMort30.value,
+        MORTGAGE15US: lMort15?.value ?? null,
+        DGS10:        lDgs10.value,
+        FEDFUNDS:     l(fedfunds)?.value ?? null,
+      },
+      derived: {
+        mbs_spread:              mbsSpread,
+        mbs_spread_label:        '30yr mortgage rate minus 10Y Treasury yield',
+        week52_high:             week52High,
+        week52_low:              week52Low,
+        week52_position_pct:     week52PositionPct,
+        week52_position_label:   `Current rate is at ${week52PositionPct}% of the 52-week high-low range`,
+        refi_breakeven_threshold: refiBtThreshold,
+        refi_breakeven_label:    'Borrowers with existing rates above this level likely benefit from refinancing (0.75% savings rule of thumb)',
+      },
+      signals: {
+        rate_trend_30d:   trend30,
+        rate_trend_90d:   trend90,
+        rate_vs_52wk:     rateVs52wk,
+        refi_environment: refiEnv,
+      },
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED). Break-even threshold assumes ~0.75% rate reduction needed to recover closing costs within 3 years.',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch refi signal bundle', detail: err.message }); }
+});
+
+// ── Bundle: Purchase Market ───────────────────────────────────────────────────
+
+app.get('/api/bundle/purchase-market', async (req, res) => {
+  try {
+    const end = todayISO();
+    const [mort30, mspus, houst, fedfunds] = await Promise.all([
+      fetchFredSeries('MORTGAGE30US', daysAgoISO(45),  end),
+      fetchFredSeries('MSPUS',        daysAgoISO(200), end),
+      fetchFredSeries('HOUST',        daysAgoISO(90),  end),
+      fetchFredSeries('FEDFUNDS',     daysAgoISO(10),  end),
+    ]);
+    const l = arr => arr[arr.length - 1];
+    const lMort30 = l(mort30), lMspus = l(mspus), lHoust = l(houst);
+    if (!lMort30 || !lMspus) return res.status(404).json({ error: 'Insufficient purchase market data' });
+
+    const loanAmount   = Math.round(lMspus.value * 0.80);
+    const monthlyPmt   = calcMonthlyPayment(loanAmount, lMort30.value);
+    const incomeReq28  = Math.round(monthlyPmt / 0.28 * 12);
+
+    const prevMspus = mspus.length >= 2 ? mspus[mspus.length - 2] : null;
+    const priceChgQoQ = prevMspus
+      ? parseFloat(((lMspus.value - prevMspus.value) / prevMspus.value * 100).toFixed(2)) : null;
+
+    const affordLevel = incomeReq28 > 120000 ? 'elevated'
+      : incomeReq28 > 80000 ? 'moderate' : 'accessible';
+
+    const houstVal = lHoust?.value ?? null;
+    const marketActivity = houstVal === null ? null
+      : houstVal > 1500 ? 'strong' : houstVal > 1100 ? 'moderate' : 'subdued';
+
+    res.json({
+      service: 'LastLook Data', as_of: lMspus.date, bundle: 'purchase_market',
+      series: {
+        MORTGAGE30US: lMort30.value,
+        MSPUS:        lMspus.value,
+        HOUST:        houstVal,
+        FEDFUNDS:     l(fedfunds)?.value ?? null,
+      },
+      derived: {
+        loan_amount:               loanAmount,
+        loan_amount_label:         'Median home price at 80% LTV (20% down payment assumed)',
+        monthly_payment_estimate:  monthlyPmt,
+        monthly_payment_label:     'Estimated monthly P&I at current 30yr rate on median home',
+        income_required_28pct:     incomeReq28,
+        income_required_label:     'Annual gross income required to qualify at 28% front-end DTI',
+        home_price_change_qoq:     priceChgQoQ,
+        home_price_change_qoq_label: 'Median sale price change vs prior quarter (%)',
+      },
+      signals: {
+        affordability_level: affordLevel,
+        market_activity:     marketActivity,
+      },
+      note: 'Source: Federal Reserve Bank of St. Louis (FRED). Payment estimates assume 30yr fixed, 20% down. Income requirement uses 28% front-end DTI (principal and interest only — does not include taxes, insurance, or HOA).',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch purchase market bundle', detail: err.message }); }
 });
 
 app.listen(PORT, () => console.log(`LastLook Data running on port ${PORT}`));

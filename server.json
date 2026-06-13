@@ -3,7 +3,7 @@
   "name": "io.github.zev-lll/lastlook-data",
   "title": "LastLook Data",
   "description": "FRED macro data, Treasury yields, FX rates & macro indicators for AI agents. Pay-per-query via x402.",
-  "version": "2.8.3",
+  "version": "2.11.0",
   "websiteUrl": "https://www.lastlookdata.com",
   "repository": {
     "url": "https://github.com/zev-lll/lastlook-data",
