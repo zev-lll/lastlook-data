@@ -119,6 +119,8 @@ const PAID_PATHS = [
   '/api/bundle/rate-environment', '/api/bundle/mortgage-pulse', '/api/bundle/macro',
   '/api/bundle/fx-dashboard', '/api/bundle/energy', '/api/bundle/context-brief',
   '/api/bundle/refi-signal', '/api/bundle/purchase-market',
+  '/api/crypto/price', '/api/crypto/history', '/api/bundle/crypto',
+  '/api/edgar/company',
 ];
 app.use((req, res, next) => {
   if (req.method === 'HEAD' && PAID_PATHS.includes(req.path)) return res.status(402).end();
@@ -414,6 +416,58 @@ app.use(
           ),
         },
       },
+
+      // ── Crypto: single coin price ($0.02) ─────────────────────────────────────
+      'GET /api/crypto/price': {
+        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — current price, 24h change, market cap, and volume for any supported cryptocurrency. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            { type: 'object', properties: { coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] } }, required: ['coin'] },
+            { service: 'LastLook Data', symbol: 'BTC', name: 'Bitcoin', price_usd: 67500.5, change_24h_pct: 2.43, market_cap_usd: 1332000000000, volume_24h_usd: 28500000000, as_of: '2026-06-23T12:00:00Z', source: 'CoinGecko' },
+          ),
+        },
+      },
+
+      // ── Crypto: historical prices ($0.15) ─────────────────────────────────────
+      'GET /api/crypto/history': {
+        accepts: [{ scheme: 'exact', price: '$0.15', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — historical daily closing prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            { type: 'object', properties: { coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] }, days: { type: 'string', description: '30, 90, or 365 days of history', enum: ['30','90','365'] } }, required: ['coin', 'days'] },
+            { service: 'LastLook Data', symbol: 'BTC', name: 'Bitcoin', days: 30, count: 30, start: '2026-05-24', end: '2026-06-23', observations: [{ date: '2026-05-24', price_usd: 65000.0 }, { date: '2026-06-23', price_usd: 67500.5 }], source: 'CoinGecko' },
+          ),
+        },
+      },
+
+      // ── Bundle: Crypto Top 20 ($0.50) ─────────────────────────────────────────
+      'GET /api/bundle/crypto': {
+        accepts: [{ scheme: 'exact', price: '$0.50', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — top 20 cryptocurrencies by market cap: price, 24h change, 7d change, market cap, and volume in one call. Source: CoinGecko.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            null,
+            { service: 'LastLook Data', bundle: 'crypto', as_of: '2026-06-23T12:00:00Z', count: 20, coins: [{ rank: 1, symbol: 'BTC', name: 'Bitcoin', price_usd: 67500.5, change_24h_pct: 2.43, change_7d_pct: -1.2, market_cap_usd: 1332000000000, volume_24h_usd: 28500000000 }], source: 'CoinGecko' },
+          ),
+        },
+      },
+
+      // ── EDGAR: company fundamentals ($0.75) ───────────────────────────────────
+      'GET /api/edgar/company': {
+        accepts: [{ scheme: 'exact', price: '$0.75', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        description: 'LastLook Data — company financial fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, and EPS from 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|AMZN|NVDA|GOOGL|META|etc.',
+        mimeType: 'application/json',
+        extensions: {
+          ...lastlookExtension(
+            { type: 'object', properties: { ticker: { type: 'string', description: 'Stock ticker symbol e.g. AAPL, MSFT, TSLA, AMZN, NVDA, GOOGL, META' } }, required: ['ticker'] },
+            { service: 'LastLook Data', ticker: 'AAPL', company_name: 'APPLE INC', cik: '0000320193', fundamentals: { revenue: { annual: [{ period_end: '2023-09-30', value: 383285000000, fiscal_year: 2023 }], quarterly: [{ period_end: '2024-03-30', value: 90753000000, fiscal_period: 'Q2' }] }, net_income: { annual: [{ period_end: '2023-09-30', value: 96995000000 }] }, total_assets: { annual: [{ period_end: '2023-09-30', value: 352583000000 }] } }, as_of: '2026-06-23', source: 'SEC EDGAR (XBRL)' },
+          ),
+        },
+      },
     },
     server,
   )
@@ -484,6 +538,196 @@ async function fetchFXSeries(pair, days) {
   return observations;
 }
 
+// ── Crypto constants ──────────────────────────────────────────────────────────
+
+const COIN_IDS = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana',
+  BNB: 'binancecoin', XRP: 'ripple', USDT: 'tether',
+  USDC: 'usd-coin', ADA: 'cardano', AVAX: 'avalanche-2',
+  DOGE: 'dogecoin', DOT: 'polkadot', MATIC: 'matic-network',
+  LINK: 'chainlink', LTC: 'litecoin', ATOM: 'cosmos',
+  UNI: 'uniswap', SUI: 'sui', APT: 'aptos',
+  NEAR: 'near', PEPE: 'pepe',
+};
+
+const COIN_LABELS = {
+  BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana',
+  BNB: 'BNB', XRP: 'XRP', USDT: 'Tether',
+  USDC: 'USD Coin', ADA: 'Cardano', AVAX: 'Avalanche',
+  DOGE: 'Dogecoin', DOT: 'Polkadot', MATIC: 'Polygon',
+  LINK: 'Chainlink', LTC: 'Litecoin', ATOM: 'Cosmos',
+  UNI: 'Uniswap', SUI: 'Sui', APT: 'Aptos',
+  NEAR: 'NEAR Protocol', PEPE: 'Pepe',
+};
+
+const ALLOWED_COINS = new Set(Object.keys(COIN_IDS));
+
+const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
+
+// ── EDGAR constants ───────────────────────────────────────────────────────────
+
+const EDGAR_HEADERS = {
+  'User-Agent': 'LastLook Data api@lastlookdata.com',
+  'Accept': 'application/json',
+};
+
+// ── Crypto helpers ────────────────────────────────────────────────────────────
+
+async function fetchCoinPrice(symbol) {
+  const id = COIN_IDS[symbol];
+  const cacheKey = `crypto_price_${symbol}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  const response = await axios.get(`${COINGECKO_BASE}/simple/price`, {
+    params: {
+      ids: id,
+      vs_currencies: 'usd',
+      include_market_cap: true,
+      include_24hr_vol: true,
+      include_24hr_change: true,
+      precision: 6,
+    },
+  });
+  const data = response.data[id];
+  const result = {
+    symbol,
+    name: COIN_LABELS[symbol],
+    price_usd: data.usd,
+    market_cap_usd: data.usd_market_cap,
+    volume_24h_usd: data.usd_24h_vol,
+    change_24h_pct: parseFloat((data.usd_24h_change || 0).toFixed(4)),
+    fetched_at: new Date().toISOString(),
+  };
+  cache.set(cacheKey, result, 60); // 1-min TTL for prices
+  return result;
+}
+
+async function fetchCryptoMarkets(perPage = 20) {
+  const cacheKey = `crypto_markets_${perPage}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  const response = await axios.get(`${COINGECKO_BASE}/coins/markets`, {
+    params: {
+      vs_currency: 'usd',
+      order: 'market_cap_desc',
+      per_page: perPage,
+      page: 1,
+      sparkline: false,
+      price_change_percentage: '24h,7d',
+      precision: 6,
+    },
+  });
+  cache.set(cacheKey, response.data, 60); // 1-min TTL
+  return response.data;
+}
+
+async function fetchCoinHistory(symbol, days) {
+  const id = COIN_IDS[symbol];
+  const cacheKey = `crypto_history_${symbol}_${days}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  const response = await axios.get(`${COINGECKO_BASE}/coins/${id}/market_chart`, {
+    params: { vs_currency: 'usd', days, interval: 'daily' },
+  });
+  // prices is [[timestamp_ms, price], ...] — deduplicate by date, keep last per day
+  const byDate = {};
+  for (const [ts, price] of response.data.prices) {
+    const date = new Date(ts).toISOString().slice(0, 10);
+    byDate[date] = parseFloat(price.toFixed(6));
+  }
+  const result = Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, price_usd]) => ({ date, price_usd }));
+  cache.set(cacheKey, result, 3600); // 1-hour TTL for history
+  return result;
+}
+
+// ── EDGAR helpers ─────────────────────────────────────────────────────────────
+
+let edgarTickerMapCache = null;
+
+async function getEdgarTickerMap() {
+  if (edgarTickerMapCache) return edgarTickerMapCache;
+  const cached = cache.get('edgar_ticker_map');
+  if (cached) { edgarTickerMapCache = cached; return cached; }
+  const response = await axios.get('https://www.sec.gov/files/company_tickers.json', {
+    headers: EDGAR_HEADERS,
+    timeout: 20000,
+  });
+  const map = {};
+  for (const entry of Object.values(response.data)) {
+    map[entry.ticker.toUpperCase()] = {
+      cik: String(entry.cik_str).padStart(10, '0'),
+      name: entry.title,
+    };
+  }
+  cache.set('edgar_ticker_map', map, 86400); // 24-hour TTL
+  edgarTickerMapCache = map;
+  return map;
+}
+
+async function fetchEdgarConcept(cikUrl, concept) {
+  try {
+    const url = `https://data.sec.gov/api/xbrl/companyconcept/${cikUrl}/us-gaap/${concept}.json`;
+    const response = await axios.get(url, { headers: EDGAR_HEADERS, timeout: 15000 });
+    const usd = response.data.units?.USD;
+    if (!usd || !usd.length) return null;
+    const annual = usd
+      .filter(e => e.form === '10-K' && e.val != null)
+      .sort((a, b) => b.end.localeCompare(a.end))
+      .slice(0, 5)
+      .map(e => ({ period_end: e.end, fiscal_year: e.fy, value: e.val, filed: e.filed }));
+    const quarterly = usd
+      .filter(e => e.form === '10-Q' && e.val != null && e.fp)
+      .sort((a, b) => b.end.localeCompare(a.end))
+      .slice(0, 8)
+      .map(e => ({ period_end: e.end, fiscal_period: e.fp, fiscal_year: e.fy, value: e.val, filed: e.filed }));
+    return { concept, label: response.data.label || concept, annual, quarterly };
+  } catch (err) {
+    if (err.response?.status === 404) return null;
+    return null; // absorb timeouts and other errors gracefully
+  }
+}
+
+async function fetchEdgarCompany(ticker) {
+  const upper = ticker.toUpperCase();
+  const cacheKey = `edgar_company_${upper}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  const tickerMap = await getEdgarTickerMap();
+  const company = tickerMap[upper];
+  if (!company) return null;
+  const cikUrl = `CIK${company.cik}`;
+  const [rev, revAlt, netIncome, assets, equity, eps] = await Promise.allSettled([
+    fetchEdgarConcept(cikUrl, 'Revenues'),
+    fetchEdgarConcept(cikUrl, 'RevenueFromContractWithCustomerExcludingAssessedTax'),
+    fetchEdgarConcept(cikUrl, 'NetIncomeLoss'),
+    fetchEdgarConcept(cikUrl, 'Assets'),
+    fetchEdgarConcept(cikUrl, 'StockholdersEquity'),
+    fetchEdgarConcept(cikUrl, 'EarningsPerShareBasic'),
+  ]);
+  const get = r => r.status === 'fulfilled' ? r.value : null;
+  const result = {
+    service: 'LastLook Data',
+    ticker: upper,
+    company_name: company.name,
+    cik: company.cik,
+    fundamentals: {
+      revenue:              get(rev) || get(revAlt),
+      net_income:           get(netIncome),
+      total_assets:         get(assets),
+      stockholders_equity:  get(equity),
+      eps_basic:            get(eps),
+    },
+    as_of: new Date().toISOString().slice(0, 10),
+    edgar_url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${company.cik}&type=10-K&owner=include&count=10`,
+    source: 'SEC EDGAR (XBRL)',
+    note: 'Annual data from 10-K filings. Quarterly from 10-Q. All monetary values in USD.',
+  };
+  cache.set(cacheKey, result, 14400); // 4-hour TTL
+  return result;
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function calcMonthlyPayment(principal, annualRatePct, termYears = 30) {
@@ -509,8 +753,8 @@ app.get('/', (req, res) => {
   if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
-    version: '2.11.0',
-    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators.',
+    version: '2.12.0',
+    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, energy prices, macro indicators, crypto prices (CoinGecko), and company fundamentals (SEC EDGAR). Pay per query via x402.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
     x402: {
@@ -542,6 +786,10 @@ app.get('/', (req, res) => {
       { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/fx-dashboard',     description: 'G10 FX dashboard — all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) with USD strength index vs basket (30d).',      price: '0.35', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/energy',           description: 'Energy and commodities bundle — WTI crude, Brent crude, US gasoline, Henry Hub natural gas with WTI-Brent spread and market signal.',                         price: '0.25', currency: 'USDC' },
       { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/context-brief',    description: 'Economic context brief — 15+ indicators in a pre-formatted natural-language paragraph ready for LLM context injection. Covers rates, inflation, FX, energy.',  price: '0.75', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/crypto/price',           description: 'Current price, 24h change, market cap, and volume for any supported crypto. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',         price: '0.02', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/crypto/history',         description: 'Historical daily prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',                                                         price: '0.15', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/crypto',          description: 'Top 20 cryptocurrencies by market cap — price, 24h change, 7d change, market cap, volume in one call. Source: CoinGecko.',                                          price: '0.50', currency: 'USDC' },
+      { method: 'GET', url: 'https://api.lastlookdata.com/api/edgar/company',          description: 'Company fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, EPS. 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|etc.',   price: '0.75', currency: 'USDC' },
     ],
     supported_series: {
       treasury:        ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
@@ -551,10 +799,11 @@ app.get('/', (req, res) => {
       energy:          ['DCOILWTICO', 'DCOILBRENTEU', 'GASREGCOVW', 'DHHNGSP'],
     },
     supported_fx: [...ALLOWED_FX],
+    supported_crypto: [...ALLOWED_COINS],
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.11.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.12.0' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
@@ -792,6 +1041,48 @@ app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json(
       price: '0.75',
       currency: 'USDC',
       pricing: { amount: '0.75', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'Crypto — Current Price',
+      url: 'https://api.lastlookdata.com/api/crypto/price',
+      method: 'GET',
+      description: 'Current price, 24h change, market cap, and volume for any supported cryptocurrency. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',
+      price: '0.02',
+      currency: 'USDC',
+      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
+      schema: { coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] } },
+    },
+    {
+      name: 'Crypto — Historical Prices',
+      url: 'https://api.lastlookdata.com/api/crypto/history',
+      method: 'GET',
+      description: 'Historical daily prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',
+      price: '0.15',
+      currency: 'USDC',
+      pricing: { amount: '0.15', currency: 'USDC', network: 'Base', scheme: 'exact' },
+      schema: {
+        coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] },
+        days: { type: 'string', description: 'History window', enum: ['30','90','365'] },
+      },
+    },
+    {
+      name: 'Bundle — Crypto Top 20',
+      url: 'https://api.lastlookdata.com/api/bundle/crypto',
+      method: 'GET',
+      description: 'Top 20 cryptocurrencies by market cap — price, 24h change, 7d change, market cap, and volume in one call. Source: CoinGecko.',
+      price: '0.50',
+      currency: 'USDC',
+      pricing: { amount: '0.50', currency: 'USDC', network: 'Base', scheme: 'exact' },
+    },
+    {
+      name: 'EDGAR — Company Fundamentals',
+      url: 'https://api.lastlookdata.com/api/edgar/company',
+      method: 'GET',
+      description: 'Company financial fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, and EPS from 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|AMZN|NVDA|GOOGL|META|etc.',
+      price: '0.75',
+      currency: 'USDC',
+      pricing: { amount: '0.75', currency: 'USDC', network: 'Base', scheme: 'exact' },
+      schema: { ticker: { type: 'string', description: 'Stock ticker symbol e.g. AAPL, MSFT, TSLA, AMZN, NVDA' } },
     },
   ],
 }));
@@ -1504,6 +1795,103 @@ app.get('/api/bundle/purchase-market', async (req, res) => {
       note: 'Source: Federal Reserve Bank of St. Louis (FRED). Payment estimates assume 30yr fixed, 20% down. Income requirement uses 28% front-end DTI (principal and interest only — does not include taxes, insurance, or HOA).',
     });
   } catch (err) { res.status(500).json({ error: 'Failed to fetch purchase market bundle', detail: err.message }); }
+});
+
+// ── Crypto: single coin price ─────────────────────────────────────────────────
+
+app.get('/api/crypto/price', async (req, res) => {
+  try {
+    const coin = (req.query.coin || '').toUpperCase();
+    if (!ALLOWED_COINS.has(coin)) return res.status(400).json({
+      error: `Unknown coin "${coin}".`,
+      supported_coins: [...ALLOWED_COINS],
+    });
+    const data = await fetchCoinPrice(coin);
+    res.json({
+      service: 'LastLook Data',
+      symbol: data.symbol,
+      name: data.name,
+      price_usd: data.price_usd,
+      change_24h_pct: data.change_24h_pct,
+      market_cap_usd: data.market_cap_usd,
+      volume_24h_usd: data.volume_24h_usd,
+      as_of: data.fetched_at,
+      source: 'CoinGecko',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch crypto price', detail: err.message }); }
+});
+
+// ── Crypto: historical daily prices ──────────────────────────────────────────
+
+app.get('/api/crypto/history', async (req, res) => {
+  try {
+    const coin = (req.query.coin || '').toUpperCase();
+    const days = parseInt(req.query.days, 10) || 30;
+    if (!ALLOWED_COINS.has(coin)) return res.status(400).json({
+      error: `Unknown coin "${coin}".`,
+      supported_coins: [...ALLOWED_COINS],
+    });
+    if (![30, 90, 365].includes(days)) return res.status(400).json({ error: 'days must be 30, 90, or 365' });
+    const obs = await fetchCoinHistory(coin, days);
+    if (!obs.length) return res.status(404).json({ error: `No data returned for ${coin}` });
+    res.json({
+      service: 'LastLook Data',
+      symbol: coin,
+      name: COIN_LABELS[coin],
+      days,
+      count: obs.length,
+      start: obs[0].date,
+      end: obs[obs.length - 1].date,
+      observations: obs,
+      source: 'CoinGecko',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch crypto history', detail: err.message }); }
+});
+
+// ── Bundle: Crypto Top 20 ─────────────────────────────────────────────────────
+
+app.get('/api/bundle/crypto', async (req, res) => {
+  try {
+    const markets = await fetchCryptoMarkets(20);
+    const asOf = new Date().toISOString();
+    const coins = markets.map((c, i) => ({
+      rank: i + 1,
+      symbol: c.symbol.toUpperCase(),
+      name: c.name,
+      price_usd: c.current_price,
+      change_24h_pct: c.price_change_percentage_24h !== null
+        ? parseFloat(c.price_change_percentage_24h.toFixed(4)) : null,
+      change_7d_pct: c.price_change_percentage_7d_in_currency !== null
+        ? parseFloat(c.price_change_percentage_7d_in_currency.toFixed(4)) : null,
+      market_cap_usd: c.market_cap,
+      volume_24h_usd: c.total_volume,
+    }));
+    res.json({
+      service: 'LastLook Data',
+      bundle: 'crypto',
+      as_of: asOf,
+      count: coins.length,
+      coins,
+      source: 'CoinGecko',
+    });
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch crypto bundle', detail: err.message }); }
+});
+
+// ── EDGAR: company fundamentals ───────────────────────────────────────────────
+
+app.get('/api/edgar/company', async (req, res) => {
+  try {
+    const ticker = (req.query.ticker || '').toUpperCase().trim();
+    if (!ticker) return res.status(400).json({ error: 'Please provide a ticker symbol using ?ticker=AAPL' });
+    if (!/^[A-Z]{1,5}$/.test(ticker)) return res.status(400).json({
+      error: `Invalid ticker format "${ticker}". Use 1–5 uppercase letters (e.g. ?ticker=AAPL).`,
+    });
+    const data = await fetchEdgarCompany(ticker);
+    if (!data) return res.status(404).json({
+      error: `Ticker "${ticker}" not found in SEC EDGAR. Verify it is a US-listed public company.`,
+    });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch EDGAR data', detail: err.message }); }
 });
 
 app.listen(PORT, () => console.log(`LastLook Data running on port ${PORT}`));

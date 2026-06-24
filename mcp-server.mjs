@@ -8,7 +8,7 @@ import express from 'express';
 function createMcpServer() {
 const server = new McpServer({
   name: 'lastlook-data',
-  version: '2.10.0',
+  version: '2.12.0',
   description: 'LastLook Data — financial market data for AI agents. FRED macro data (Treasury yields, mortgage rates, benchmark rates, CPI, IORB, EFFR, energy prices), G10 FX rates, derived indicators. Pay per query via x402.'
 });
 
@@ -56,6 +56,28 @@ const SERIES_ENUM = [
 ];
 
 const FX_ENUM = ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'];
+
+const COIN_IDS = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana',
+  BNB: 'binancecoin', XRP: 'ripple', USDT: 'tether',
+  USDC: 'usd-coin', ADA: 'cardano', AVAX: 'avalanche-2',
+  DOGE: 'dogecoin', DOT: 'polkadot', MATIC: 'matic-network',
+  LINK: 'chainlink', LTC: 'litecoin', ATOM: 'cosmos',
+  UNI: 'uniswap', SUI: 'sui', APT: 'aptos',
+  NEAR: 'near', PEPE: 'pepe',
+};
+
+const COIN_LABELS = {
+  BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana',
+  BNB: 'BNB', XRP: 'XRP', USDT: 'Tether',
+  USDC: 'USD Coin', ADA: 'Cardano', AVAX: 'Avalanche',
+  DOGE: 'Dogecoin', DOT: 'Polkadot', MATIC: 'Polygon',
+  LINK: 'Chainlink', LTC: 'Litecoin', ATOM: 'Cosmos',
+  UNI: 'Uniswap', SUI: 'Sui', APT: 'Aptos',
+  NEAR: 'NEAR Protocol', PEPE: 'Pepe',
+};
+
+const COIN_ENUM = Object.keys(COIN_IDS);
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -936,6 +958,218 @@ server.registerTool(
   }
 );
 
+// ── Tool 21: Crypto — current price ──────────────────────────────────────────
+server.registerTool(
+  'get_crypto_price',
+  {
+    title: 'Get Current Crypto Price',
+    description:
+      'Returns the current USD price, 24h % change, market cap, and 24h volume for any supported cryptocurrency. ' +
+      'Supported: BTC, ETH, SOL, BNB, XRP, USDT, USDC, ADA, AVAX, DOGE, DOT, MATIC, LINK, LTC, ATOM, UNI, SUI, APT, NEAR, PEPE. ' +
+      'Source: CoinGecko. Priced at $0.02 USDC via x402 on Base.',
+    inputSchema: {
+      coin: z.enum(COIN_ENUM).describe('Crypto symbol e.g. BTC, ETH, SOL, DOGE'),
+    },
+    outputSchema: {
+      symbol:           z.string().describe('Crypto symbol'),
+      name:             z.string().describe('Full name'),
+      price_usd:        z.number().describe('Current price in USD'),
+      change_24h_pct:   z.number().describe('24-hour price change %'),
+      market_cap_usd:   z.number().nullable().describe('Market cap in USD'),
+      volume_24h_usd:   z.number().nullable().describe('24-hour trading volume in USD'),
+      as_of:            z.string().describe('ISO timestamp of the data fetch'),
+    },
+    annotations: READ_ONLY,
+  },
+  async ({ coin }) => {
+    const endpoint = `https://api.lastlookdata.com/api/crypto/price?coin=${coin}`;
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const text =
+        `${d.name} (${d.symbol}): $${d.price_usd?.toLocaleString()} USD\n` +
+        `24h change: ${d.change_24h_pct > 0 ? '+' : ''}${d.change_24h_pct}%\n` +
+        `Market cap: $${d.market_cap_usd?.toLocaleString()}\n` +
+        `Volume (24h): $${d.volume_24h_usd?.toLocaleString()}\n` +
+        `As of: ${d.as_of}\nSource: LastLook Data via CoinGecko`;
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: {
+          symbol: d.symbol, name: d.name,
+          price_usd: d.price_usd, change_24h_pct: d.change_24h_pct,
+          market_cap_usd: d.market_cap_usd, volume_24h_usd: d.volume_24h_usd,
+          as_of: d.as_of,
+        },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.02 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 22: Crypto — historical prices ──────────────────────────────────────
+server.registerTool(
+  'get_crypto_history',
+  {
+    title: 'Get Crypto Historical Prices',
+    description:
+      'Returns historical daily closing prices for any supported cryptocurrency over 30, 90, or 365 days. ' +
+      'Use for trend analysis, drawdown calculation, or training data. Source: CoinGecko. Priced at $0.15 USDC via x402.',
+    inputSchema: {
+      coin: z.enum(COIN_ENUM).describe('Crypto symbol e.g. BTC, ETH, SOL'),
+      days: z.enum(['30','90','365']).describe('History window: 30 ($0.15), 90 ($0.15), or 365 ($0.15) days'),
+    },
+    outputSchema: {
+      symbol:       z.string().describe('Crypto symbol'),
+      name:         z.string().describe('Full coin name'),
+      days:         z.number().describe('Number of days requested'),
+      count:        z.number().describe('Number of data points returned'),
+      start:        z.string().describe('Start date (YYYY-MM-DD)'),
+      end:          z.string().describe('End date (YYYY-MM-DD)'),
+      observations: z.array(z.object({ date: z.string(), price_usd: z.number() })).describe('Daily price observations'),
+    },
+    annotations: READ_ONLY,
+  },
+  async ({ coin, days }) => {
+    const endpoint = `https://api.lastlookdata.com/api/crypto/history?coin=${coin}&days=${days}`;
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const latest = d.observations[d.observations.length - 1];
+      const first  = d.observations[0];
+      const pctChg = first?.price_usd ? parseFloat(((latest.price_usd - first.price_usd) / first.price_usd * 100).toFixed(2)) : null;
+      const rows = d.observations.map(o => `  ${o.date}  $${o.price_usd.toLocaleString()}`).join('\n');
+      const text =
+        `${d.name} (${d.symbol}) — last ${days} days\n` +
+        `${d.count} observations from ${d.start} to ${d.end}\n` +
+        (pctChg !== null ? `Period change: ${pctChg > 0 ? '+' : ''}${pctChg}%\n` : '') +
+        `\nDate        Price (USD)\n──────────  ──────────\n${rows}\n\nSource: LastLook Data via CoinGecko`;
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: {
+          symbol: d.symbol, name: d.name, days: d.days,
+          count: d.count, start: d.start, end: d.end,
+          observations: d.observations,
+        },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.15 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 23: Bundle — Crypto Top 20 ──────────────────────────────────────────
+server.registerTool(
+  'get_bundle_crypto',
+  {
+    title: 'Get Crypto Top 20 Bundle',
+    description:
+      'Returns the top 20 cryptocurrencies by market cap in one call: price, 24h change, 7d change, market cap, and volume. ' +
+      'Covers BTC, ETH, SOL, BNB, XRP, USDT, USDC, ADA, AVAX, DOGE, and more. ' +
+      'Use this instead of individual get_crypto_price calls when you need broad market coverage. ' +
+      'Source: CoinGecko. Priced at $0.50 USDC via x402 on Base.',
+    inputSchema: {},
+    outputSchema: {
+      bundle:  z.string().describe('Bundle identifier: crypto'),
+      as_of:   z.string().describe('ISO timestamp of the data fetch'),
+      count:   z.number().describe('Number of coins returned'),
+      coins:   z.array(z.object({
+        rank:            z.number().describe('Market cap rank'),
+        symbol:          z.string().describe('Ticker symbol'),
+        name:            z.string().describe('Full name'),
+        price_usd:       z.number().describe('Current price in USD'),
+        change_24h_pct:  z.number().nullable().describe('24h price change %'),
+        change_7d_pct:   z.number().nullable().describe('7d price change %'),
+        market_cap_usd:  z.number().nullable().describe('Market cap in USD'),
+        volume_24h_usd:  z.number().nullable().describe('24h volume in USD'),
+      })).describe('Top 20 coins by market cap'),
+    },
+    annotations: READ_ONLY,
+  },
+  async () => {
+    const endpoint = 'https://api.lastlookdata.com/api/bundle/crypto';
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const rows = d.coins.map(c =>
+        `  ${String(c.rank).padStart(2)}. ${c.symbol.padEnd(6)} $${c.price_usd?.toLocaleString().padStart(14)}  ${(c.change_24h_pct != null ? (c.change_24h_pct >= 0 ? '+' : '') + c.change_24h_pct.toFixed(2) + '%' : 'N/A').padStart(8)}  MCap: $${(c.market_cap_usd / 1e9).toFixed(1)}B`
+      ).join('\n');
+      const text =
+        `Crypto Market — Top 20 by Market Cap\n` +
+        `As of: ${d.as_of}\n\n` +
+        `Rank  Symbol  Price (USD)       24h Chg    Market Cap\n` +
+        `─────────────────────────────────────────────────────\n` +
+        `${rows}\n\nSource: LastLook Data via CoinGecko`;
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: { bundle: d.bundle, as_of: d.as_of, count: d.count, coins: d.coins },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.50 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
+// ── Tool 24: EDGAR — company fundamentals ────────────────────────────────────
+server.registerTool(
+  'get_edgar_company',
+  {
+    title: 'Get Company Fundamentals (SEC EDGAR)',
+    description:
+      'Returns financial fundamentals for any US public company from SEC EDGAR XBRL filings: ' +
+      'revenue, net income, total assets, stockholders equity, and EPS. ' +
+      'Includes both annual (10-K) and quarterly (10-Q) data for the most recent periods. ' +
+      'Works for any ticker listed on a US exchange (AAPL, MSFT, TSLA, AMZN, NVDA, GOOGL, META, JPM, BAC, etc.). ' +
+      'Source: SEC EDGAR. Priced at $0.75 USDC via x402 on Base.',
+    inputSchema: {
+      ticker: z.string().min(1).max(5).describe('Stock ticker symbol e.g. AAPL, MSFT, TSLA, AMZN, NVDA, GOOGL'),
+    },
+    outputSchema: {
+      ticker:        z.string().describe('Ticker symbol'),
+      company_name:  z.string().describe('Company legal name'),
+      cik:           z.string().describe('SEC Central Index Key'),
+      fundamentals:  z.record(z.string(), z.any()).describe('Financial data: revenue, net_income, total_assets, stockholders_equity, eps_basic'),
+      as_of:         z.string().describe('Date the data was fetched'),
+      edgar_url:     z.string().describe('EDGAR filing browser URL for this company'),
+    },
+    annotations: READ_ONLY,
+  },
+  async ({ ticker }) => {
+    const endpoint = `https://api.lastlookdata.com/api/edgar/company?ticker=${ticker.toUpperCase()}`;
+    try {
+      const { data: d } = await axios.get(endpoint);
+      const fmt = (v) => v != null ? `$${(v / 1e9).toFixed(2)}B` : 'N/A';
+      const fmtPeriod = (arr) => arr?.length ? `${arr[0].period_end} → ${fmt(arr[0].value)}` : 'N/A';
+      const lines = [
+        `${d.company_name} (${d.ticker})  |  CIK: ${d.cik}`,
+        `As of: ${d.as_of}  |  Source: SEC EDGAR`,
+        '',
+        'Annual Fundamentals (most recent 10-K):',
+        `  Revenue:             ${fmtPeriod(d.fundamentals?.revenue?.annual)}`,
+        `  Net Income:          ${fmtPeriod(d.fundamentals?.net_income?.annual)}`,
+        `  Total Assets:        ${fmtPeriod(d.fundamentals?.total_assets?.annual)}`,
+        `  Stockholders Equity: ${fmtPeriod(d.fundamentals?.stockholders_equity?.annual)}`,
+        d.fundamentals?.eps_basic?.annual?.length
+          ? `  EPS Basic:           ${d.fundamentals.eps_basic.annual[0].period_end} → $${d.fundamentals.eps_basic.annual[0].value}`
+          : null,
+        '',
+        `EDGAR filings: ${d.edgar_url}`,
+      ].filter(x => x !== null);
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+        structuredContent: {
+          ticker: d.ticker, company_name: d.company_name, cik: d.cik,
+          fundamentals: d.fundamentals, as_of: d.as_of, edgar_url: d.edgar_url,
+        },
+      };
+    } catch (err) {
+      if (err.response?.status === 402) return { content: [{ type: 'text', text: `Payment required: $0.75 USDC via x402 on Base.\nEndpoint: ${endpoint}` }] };
+      if (err.response?.status === 404) return { content: [{ type: 'text', text: `Company not found for ticker "${ticker}". Verify it is a US-listed public company.` }], isError: true };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+);
+
   return server;
 }
 
@@ -962,7 +1196,7 @@ if (isHTTP) {
     await transport.handleRequest(req, res);
   });
 
-  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.10.0' }));
+  app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data MCP', version: '2.12.0' }));
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`LastLook Data MCP server running on port ${PORT}`));
