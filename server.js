@@ -9,6 +9,7 @@ const { x402ResourceServer, HTTPFacilitatorClient } = require('@x402/core/server
 const { registerExactEvmScheme } = require('@x402/evm/exact/server');
 const { bazaarResourceServerExtension, declareDiscoveryExtension } = require('@x402/extensions/bazaar');
 const { facilitator: cdpFacilitator } = require('@coinbase/x402');
+const { convertToTokenAmount, numberToDecimalString } = require('@x402/core/utils');
 
 const app = express();
 app.disable('x-powered-by');
@@ -134,7 +135,7 @@ app.use(
     {
       // ── FRED: current value ($0.01) ───────────────────────────────────────────
       'GET /api/current': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.01'),
         description: 'LastLook Data — most recent value for any supported FRED series. Use ?id=IORB, ?id=EFFR, ?id=MORTGAGE30US, ?id=FEDFUNDS, ?id=DGS10, etc.',
         mimeType: 'application/json',
         extensions: {
@@ -147,7 +148,7 @@ app.use(
 
       // ── FRED: value by date ($0.01) ───────────────────────────────────────────
       'GET /api/date': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.01'),
         description: 'LastLook Data — value for any supported FRED series on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.',
         mimeType: 'application/json',
         extensions: {
@@ -160,7 +161,7 @@ app.use(
 
       // ── FRED: 30-day series ($0.05) ───────────────────────────────────────────
       'GET /api/series/30': {
-        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.05'),
         description: 'LastLook Data — last 30 days of any FRED series. Use for mortgage rates, Fed funds, IORB, EFFR, Treasury yields, CPI, energy prices, and more.',
         mimeType: 'application/json',
         extensions: {
@@ -173,7 +174,7 @@ app.use(
 
       // ── FRED: 90-day series ($0.10) ───────────────────────────────────────────
       'GET /api/series/90': {
-        accepts: [{ scheme: 'exact', price: '$0.10', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.10'),
         description: 'LastLook Data — last 90 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
@@ -186,7 +187,7 @@ app.use(
 
       // ── FRED: 365-day series ($0.25) ──────────────────────────────────────────
       'GET /api/series/365': {
-        accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.25'),
         description: 'LastLook Data — last 365 days of any supported FRED series.',
         mimeType: 'application/json',
         extensions: {
@@ -199,7 +200,7 @@ app.use(
 
       // ── Treasury aliases (backward compat) ────────────────────────────────────
       'GET /api/treasury/current': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.01'),
         description: 'LastLook Data — current 30-year US Treasury yield (DGS30). Alias for /api/current?id=DGS30.',
         mimeType: 'application/json',
         extensions: {
@@ -211,7 +212,7 @@ app.use(
       },
 
       'GET /api/treasury/date': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.01'),
         description: 'LastLook Data — 30-year Treasury yield for a specific date. Alias for /api/date?id=DGS30&d=YYYY-MM-DD.',
         mimeType: 'application/json',
         extensions: {
@@ -224,7 +225,7 @@ app.use(
 
       // ── FX: current ($0.01) ───────────────────────────────────────────────────
       'GET /api/fx/current': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.01'),
         description: 'LastLook Data — current exchange rate for a G10 currency pair. Source: European Central Bank.',
         mimeType: 'application/json',
         extensions: {
@@ -237,7 +238,7 @@ app.use(
 
       // ── FX: by date ($0.01) ───────────────────────────────────────────────────
       'GET /api/fx/date': {
-        accepts: [{ scheme: 'exact', price: '$0.01', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.01'),
         description: 'LastLook Data — exchange rate for a G10 currency pair on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.',
         mimeType: 'application/json',
         extensions: {
@@ -250,7 +251,7 @@ app.use(
 
       // ── FX: series ($0.05/$0.10/$0.25) ───────────────────────────────────────
       'GET /api/fx/series': {
-        accepts: [{ scheme: 'exact', price: '$0.05', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.05'),
         description: 'LastLook Data — historical daily exchange rates for a G10 currency pair.',
         mimeType: 'application/json',
         extensions: {
@@ -263,7 +264,7 @@ app.use(
 
       // ── Derived: yield curve spreads ($0.03) ──────────────────────────────────
       'GET /api/derived/yield-curve': {
-        accepts: [{ scheme: 'exact', price: '$0.03', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.03'),
         description: 'LastLook Data — yield curve spreads (2s10s and 3m10y) with inversion signal. Computed from FRED Treasury data.',
         mimeType: 'application/json',
         extensions: {
@@ -276,7 +277,7 @@ app.use(
 
       // ── Derived: Sahm Rule recession indicator ($0.02) ────────────────────────
       'GET /api/derived/recession': {
-        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.02'),
         description: 'LastLook Data — real-time Sahm Rule recession indicator. Value >= 0.5 signals recession underway. Source: FRED SAHMREALTIME.',
         mimeType: 'application/json',
         extensions: {
@@ -289,7 +290,7 @@ app.use(
 
       // ── Derived: Fed policy spread ($0.02) ────────────────────────────────────
       'GET /api/derived/policy-spread': {
-        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.02'),
         description: 'LastLook Data — EFFR vs IORB spread. Shows where the effective Fed funds rate trades relative to interest on reserves.',
         mimeType: 'application/json',
         extensions: {
@@ -302,7 +303,7 @@ app.use(
 
       // ── Economic calendar ($0.02) ─────────────────────────────────────────────
       'GET /api/calendar': {
-        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.02'),
         description: 'LastLook Data — upcoming FRED economic data release dates. CPI, jobs, GDP, Treasury, and more. Use ?days=30|60|90.',
         mimeType: 'application/json',
         extensions: {
@@ -315,7 +316,7 @@ app.use(
 
       // ── Bundle: Refi Signal ($0.60) ───────────────────────────────────────────
       'GET /api/bundle/refi-signal': {
-        accepts: [{ scheme: 'exact', price: '$0.60', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.60'),
         description: 'LastLook Data — refinance signal bundle: current 30yr and 15yr mortgage rates, 52-week range, MBS spread, rate trend, and refi break-even threshold. Tells an AI agent whether a borrower should consider refinancing.',
         mimeType: 'application/json',
         extensions: {
@@ -328,7 +329,7 @@ app.use(
 
       // ── Bundle: Purchase Market ($0.60) ───────────────────────────────────────
       'GET /api/bundle/purchase-market': {
-        accepts: [{ scheme: 'exact', price: '$0.60', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.60'),
         description: 'LastLook Data — home purchase market bundle: current mortgage rate, median sale price, monthly payment estimate, income required to qualify, and affordability level. Directly answers whether a buyer can afford a median home.',
         mimeType: 'application/json',
         extensions: {
@@ -341,7 +342,7 @@ app.use(
 
       // ── Bundle: Rate Environment Snapshot ($0.35) ─────────────────────────────
       'GET /api/bundle/rate-environment': {
-        accepts: [{ scheme: 'exact', price: '$0.35', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.35'),
         description: 'LastLook Data — rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 plus yield curve spreads and policy spread. One payment, all rate data.',
         mimeType: 'application/json',
         extensions: {
@@ -354,7 +355,7 @@ app.use(
 
       // ── Bundle: Mortgage Market Pulse ($0.40) ─────────────────────────────────
       'GET /api/bundle/mortgage-pulse': {
-        accepts: [{ scheme: 'exact', price: '$0.40', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.40'),
         description: 'LastLook Data — mortgage market pulse: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',
         mimeType: 'application/json',
         extensions: {
@@ -367,7 +368,7 @@ app.use(
 
       // ── Bundle: Macro Health Snapshot ($0.50) ─────────────────────────────────
       'GET /api/bundle/macro': {
-        accepts: [{ scheme: 'exact', price: '$0.50', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.50'),
         description: 'LastLook Data — macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve spreads, and Sahm Rule recession signal. Includes cycle phase.',
         mimeType: 'application/json',
         extensions: {
@@ -380,7 +381,7 @@ app.use(
 
       // ── Bundle: FX Dashboard ($0.35) ──────────────────────────────────────────
       'GET /api/bundle/fx-dashboard': {
-        accepts: [{ scheme: 'exact', price: '$0.35', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.35'),
         description: 'LastLook Data — G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) plus USD strength index vs basket (30d).',
         mimeType: 'application/json',
         extensions: {
@@ -393,7 +394,7 @@ app.use(
 
       // ── Bundle: Energy & Commodities ($0.25) ──────────────────────────────────
       'GET /api/bundle/energy': {
-        accepts: [{ scheme: 'exact', price: '$0.25', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.25'),
         description: 'LastLook Data — energy and commodities bundle: WTI crude, Brent crude, US regular gasoline, Henry Hub natural gas. Includes WTI-Brent spread and market signal.',
         mimeType: 'application/json',
         extensions: {
@@ -406,7 +407,7 @@ app.use(
 
       // ── Bundle: Economic Context Brief ($0.75) ────────────────────────────────
       'GET /api/bundle/context-brief': {
-        accepts: [{ scheme: 'exact', price: '$0.75', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.75'),
         description: 'LastLook Data — economic context brief: 15+ indicators across rates, inflation, employment, FX, and energy in a pre-formatted natural-language paragraph for LLM context injection.',
         mimeType: 'application/json',
         extensions: {
@@ -419,7 +420,7 @@ app.use(
 
       // ── Crypto: single coin price ($0.02) ─────────────────────────────────────
       'GET /api/crypto/price': {
-        accepts: [{ scheme: 'exact', price: '$0.02', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.02'),
         description: 'LastLook Data — current price, 24h change, market cap, and volume for any supported cryptocurrency. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',
         mimeType: 'application/json',
         extensions: {
@@ -432,7 +433,7 @@ app.use(
 
       // ── Crypto: historical prices ($0.15) ─────────────────────────────────────
       'GET /api/crypto/history': {
-        accepts: [{ scheme: 'exact', price: '$0.15', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.15'),
         description: 'LastLook Data — historical daily closing prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',
         mimeType: 'application/json',
         extensions: {
@@ -445,7 +446,7 @@ app.use(
 
       // ── Bundle: Crypto Top 20 ($0.50) ─────────────────────────────────────────
       'GET /api/bundle/crypto': {
-        accepts: [{ scheme: 'exact', price: '$0.50', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.50'),
         description: 'LastLook Data — top 20 cryptocurrencies by market cap: price, 24h change, 7d change, market cap, and volume in one call. Source: CoinGecko.',
         mimeType: 'application/json',
         extensions: {
@@ -458,7 +459,7 @@ app.use(
 
       // ── EDGAR: company fundamentals ($0.75) ───────────────────────────────────
       'GET /api/edgar/company': {
-        accepts: [{ scheme: 'exact', price: '$0.75', network: 'eip155:8453', payTo: WALLET_ADDRESS }],
+        accepts: paymentAccepts('$0.75'),
         description: 'LastLook Data — company financial fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, and EPS from 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|AMZN|NVDA|GOOGL|META|etc.',
         mimeType: 'application/json',
         extensions: {
@@ -600,6 +601,74 @@ async function fetchCoinPrice(symbol) {
   };
   cache.set(cacheKey, result, 60); // 1-min TTL for prices
   return result;
+}
+
+// ── Solana-on-Base (bridged SOL) as an alternate payment asset ────────────────
+// Official Base<->Solana bridge: bridging SOL from Solana mints this ERC-20 on Base.
+// https://docs.base.org/base-chain/network-information/base-solana-bridge
+// Verified contract, 9 decimals (matches Solana's native precision). No EIP-3009 /
+// EIP-2612 on this token, so it settles through x402's Permit2 fallback (CDP
+// facilitator docs confirm support for "all ERC-20 tokens on its EVM networks
+// through EIP-3009 or Permit2").
+const SOL_BASE_ADDRESS = '0x311935Cd80B76769bF2ecC9D8Ab7635b2139cf82';
+const SOL_BASE_DECIMALS = 9;
+
+// Dollar-string pricing ("$0.01") only auto-resolves to a network's DEFAULT asset
+// (USDC on Base) -- there's no built-in USD conversion for a non-default asset, so
+// we track a live SOL/USD price ourselves and compute the atomic token amount per
+// request via a getter (see solAccept below), instead of freezing an amount at
+// server boot that would drift as SOL's price moves.
+let solUsdPriceSync = null;
+
+async function refreshSolUsdPrice() {
+  try {
+    const response = await axios.get(`${COINGECKO_BASE}/simple/price`, {
+      params: { ids: 'solana', vs_currencies: 'usd' },
+      timeout: 5000,
+    });
+    const price = response.data?.solana?.usd;
+    if (typeof price === 'number' && price > 0) solUsdPriceSync = price;
+  } catch (err) {
+    console.error('[SOL pricing] CoinGecko refresh failed, keeping last known price:', err.message);
+  }
+}
+refreshSolUsdPrice().catch(() => {}); // prime at boot
+setInterval(() => refreshSolUsdPrice().catch(() => {}), 60_000);
+
+// Safety fallback only -- covers the first seconds after boot (before the first
+// CoinGecko fetch resolves) or an extended CoinGecko outage. It bounds worst-case
+// mispricing during those windows; it does not set day-to-day pricing. Nudge this
+// occasionally if SOL's price has moved a lot since it was last updated.
+const SOL_USD_BOOT_FALLBACK = 99.3;
+
+// Second `accepts` entry for a route: pay the same USD-equivalent price in
+// Solana-on-Base instead of USDC. `price` is a getter so it's recomputed fresh on
+// every request from the live-refreshed solUsdPriceSync, not baked in once at startup.
+function solAccept(usdString) {
+  const usdAmount = parseFloat(usdString.replace(/^\$/, ''));
+  return {
+    scheme: 'exact',
+    network: 'eip155:8453',
+    payTo: WALLET_ADDRESS,
+    get price() {
+      const solUsd = solUsdPriceSync || SOL_USD_BOOT_FALLBACK;
+      const solAmountDecimal = usdAmount / solUsd;
+      return {
+        amount: convertToTokenAmount(numberToDecimalString(solAmountDecimal), SOL_BASE_DECIMALS),
+        asset: SOL_BASE_ADDRESS,
+        extra: { assetTransferMethod: 'permit2' },
+      };
+    },
+  };
+}
+
+// Every paid route's `accepts` array: USDC (default asset, unchanged behavior) plus
+// the SOL option above. Payers/agents choose whichever asset they hold.
+function paymentAccepts(usdString) {
+  return [
+    { scheme: 'exact', price: usdString, network: 'eip155:8453', payTo: WALLET_ADDRESS },
+    solAccept(usdString),
+  ];
 }
 
 async function fetchCryptoMarkets(perPage = 20) {
@@ -753,7 +822,7 @@ app.get('/', (req, res) => {
   if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
   res.json({
     service: 'LastLook Data',
-    version: '2.12.0',
+    version: '2.13.0',
     description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, energy prices, macro indicators, crypto prices (CoinGecko), and company fundamentals (SEC EDGAR). Pay per query via x402.',
     website: 'https://www.lastlookdata.com',
     openapi: 'https://api.lastlookdata.com/openapi.json',
@@ -762,6 +831,7 @@ app.get('/', (req, res) => {
       version: 2,
       network: 'eip155:8453',
       currency: 'USDC',
+      accepted_assets: ['USDC', 'SOL (bridged, Base)'],
     },
     resources: [
       { method: 'GET', url: 'https://api.lastlookdata.com/api/current',      description: 'Most recent value for any supported FRED series (Treasury yields, mortgage rates, CPI, unemployment, energy prices, benchmark rates). Use ?id=SERIES_ID.',  price: '0.01', currency: 'USDC' },
@@ -803,7 +873,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.12.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.13.0' }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
@@ -823,7 +893,7 @@ app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json(
   version: '1.0',
   base_url: 'https://api.lastlookdata.com',
   content_type: 'application/json',
-  payment: { protocol: 'x402', network: 'eip155:8453', asset: 'USDC' },
+  payment: { protocol: 'x402', network: 'eip155:8453', asset: 'USDC', alternate_assets: [{ symbol: 'SOL', label: 'Solana (bridged, Base)', address: SOL_BASE_ADDRESS }] },
   resources: [
     {
       name: 'FRED Series — Current Value',
