@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.zev-lll/lastlook-data",
   "title": "LastLook Data",
-  "description": "FRED macro data, Treasury yields, FX rates & macro indicators for AI agents. Pay-per-query via x402.",
-  "version": "2.11.0",
+  "description": "Mortgage decision tools (refinance calculator, offer grader), FRED macro data, Treasury yields, FX & macro indicators for AI agents. Pay-per-query via x402 (USDC on Base or Solana).",
+  "version": "2.14.0",
   "websiteUrl": "https://www.lastlookdata.com",
   "repository": {
     "url": "https://github.com/zev-lll/lastlook-data",

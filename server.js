@@ -7,9 +7,14 @@ const NodeCache = require('node-cache');
 const { paymentMiddleware } = require('@x402/express');
 const { x402ResourceServer, HTTPFacilitatorClient } = require('@x402/core/server');
 const { registerExactEvmScheme } = require('@x402/evm/exact/server');
+const { registerExactSvmScheme } = require('@x402/svm/exact/server');
 const { bazaarResourceServerExtension, declareDiscoveryExtension } = require('@x402/extensions/bazaar');
 const { facilitator: cdpFacilitator } = require('@coinbase/x402');
-const { convertToTokenAmount, numberToDecimalString } = require('@x402/core/utils');
+const {
+  SERVICE, NETWORKS, PAID_ROUTES, acceptedNetworks,
+  buildResourceList, buildX402Manifest, buildOpenApi, buildAgentJson,
+} = require('./routes');
+const mortgageTools = require('./mortgage-tools');
 
 const app = express();
 app.disable('x-powered-by');
@@ -28,7 +33,7 @@ function lastlookExtension(inputSchema, outputExample) {
   const input = {};
   if (inputSchema?.properties) {
     for (const [key, spec] of Object.entries(inputSchema.properties)) {
-      input[key] = spec.enum?.[0] ?? '';
+      input[key] = spec.example ?? spec.enum?.[0] ?? '';
     }
   }
   // Pass properties/required without the top-level type:object (library adds that)
@@ -49,12 +54,15 @@ const cache = new NodeCache({ stdTTL: 3600 });
 const PORT = process.env.PORT || 8080;
 const FRED_API_KEY = process.env.FRED_API_KEY;
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
+// Optional: a Solana address (base58) whose USDC token account receives Solana payments.
+const SOLANA_WALLET_ADDRESS = process.env.SOLANA_WALLET_ADDRESS || '';
 
 // ── x402 v2 setup ─────────────────────────────────────────────────────────────
 
 const facilitatorClient = new HTTPFacilitatorClient(cdpFacilitator);
 const server = new x402ResourceServer(facilitatorClient);
 registerExactEvmScheme(server);
+if (SOLANA_WALLET_ADDRESS) registerExactSvmScheme(server);
 server.registerExtension(bazaarResourceServerExtension);
 
 // ── Allowed symbols ───────────────────────────────────────────────────────────
@@ -108,371 +116,44 @@ const FX_LABELS = {
   USDNOK: 'US Dollar / Norwegian Krone',
 };
 
+// ── Payment options ───────────────────────────────────────────────────────────
+// USDC on Base (always) + USDC on Solana mainnet (when SOLANA_WALLET_ADDRESS is
+// set). Dollar prices resolve to each network's default USDC asset.
+
+function paymentAccepts(usdPrice) {
+  const accepts = [{ scheme: 'exact', price: usdPrice, network: NETWORKS.base.id, payTo: WALLET_ADDRESS }];
+  if (SOLANA_WALLET_ADDRESS) {
+    accepts.push({ scheme: 'exact', price: usdPrice, network: NETWORKS.solana.id, payTo: SOLANA_WALLET_ADDRESS });
+  }
+  return accepts;
+}
+
 // ── HEAD → 402 for paid endpoints ────────────────────────────────────────────
 
-const PAID_PATHS = [
-  '/api/current', '/api/date',
-  '/api/series/30', '/api/series/90', '/api/series/365',
-  '/api/treasury/current', '/api/treasury/date',
-  '/api/fx/current', '/api/fx/date', '/api/fx/series',
-  '/api/derived/yield-curve', '/api/derived/recession', '/api/derived/policy-spread',
-  '/api/calendar',
-  '/api/bundle/rate-environment', '/api/bundle/mortgage-pulse', '/api/bundle/macro',
-  '/api/bundle/fx-dashboard', '/api/bundle/energy', '/api/bundle/context-brief',
-  '/api/bundle/refi-signal', '/api/bundle/purchase-market',
-  '/api/crypto/price', '/api/crypto/history', '/api/bundle/crypto',
-  '/api/edgar/company',
-];
+const PAID_PATHS = new Set(PAID_ROUTES.map(r => r.path));
 app.use((req, res, next) => {
-  if (req.method === 'HEAD' && PAID_PATHS.includes(req.path)) return res.status(402).end();
+  if (req.method === 'HEAD' && PAID_PATHS.has(req.path)) return res.status(402).end();
   next();
 });
 
-// ── x402 payment middleware ───────────────────────────────────────────────────
+// ── x402 payment middleware (config generated from routes.js) ────────────────
 
-app.use(
-  paymentMiddleware(
-    {
-      // ── FRED: current value ($0.01) ───────────────────────────────────────────
-      'GET /api/current': {
-        accepts: paymentAccepts('$0.01'),
-        description: 'LastLook Data — most recent value for any supported FRED series. Use ?id=IORB, ?id=EFFR, ?id=MORTGAGE30US, ?id=FEDFUNDS, ?id=DGS10, etc.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
-            { service: 'LastLook Data', series_id: 'IORB', label: 'Interest on Reserve Balances', date: '2026-05-09', value: 4.40, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      // ── FRED: value by date ($0.01) ───────────────────────────────────────────
-      'GET /api/date': {
-        accepts: paymentAccepts('$0.01'),
-        description: 'LastLook Data — value for any supported FRED series on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] }, d: { type: 'string', description: 'Date in YYYY-MM-DD format' } }, required: ['id', 'd'] },
-            { service: 'LastLook Data', series_id: 'DGS10', label: '10-Year Treasury Constant Maturity Rate', date: '2026-05-09', value: 4.42, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      // ── FRED: 30-day series ($0.05) ───────────────────────────────────────────
-      'GET /api/series/30': {
-        accepts: paymentAccepts('$0.05'),
-        description: 'LastLook Data — last 30 days of any FRED series. Use for mortgage rates, Fed funds, IORB, EFFR, Treasury yields, CPI, energy prices, and more.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
-            { service: 'LastLook Data', series_id: 'MORTGAGE30US', days: 30, count: 4, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 6.82 }, { date: '2026-05-09', value: 6.79 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      // ── FRED: 90-day series ($0.10) ───────────────────────────────────────────
-      'GET /api/series/90': {
-        accepts: paymentAccepts('$0.10'),
-        description: 'LastLook Data — last 90 days of any supported FRED series.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
-            { service: 'LastLook Data', series_id: 'DGS30', days: 90, count: 63, start: '2026-02-09', end: '2026-05-09', observations: [{ date: '2026-02-09', value: 4.75 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      // ── FRED: 365-day series ($0.25) ──────────────────────────────────────────
-      'GET /api/series/365': {
-        accepts: paymentAccepts('$0.25'),
-        description: 'LastLook Data — last 365 days of any supported FRED series.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','SAHMREALTIME','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP'] } }, required: ['id'] },
-            { service: 'LastLook Data', series_id: 'DGS30', days: 365, count: 252, start: '2025-05-09', end: '2026-05-09', observations: [{ date: '2025-05-09', value: 4.55 }, { date: '2026-05-09', value: 4.97 }], note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      // ── Treasury aliases (backward compat) ────────────────────────────────────
-      'GET /api/treasury/current': {
-        accepts: paymentAccepts('$0.01'),
-        description: 'LastLook Data — current 30-year US Treasury yield (DGS30). Alias for /api/current?id=DGS30.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: '2026-05-09', yield_percent: 4.97, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      'GET /api/treasury/date': {
-        accepts: paymentAccepts('$0.01'),
-        description: 'LastLook Data — 30-year Treasury yield for a specific date. Alias for /api/date?id=DGS30&d=YYYY-MM-DD.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } }, required: ['d'] },
-            { service: 'LastLook Data', series: 'DGS30 - 30-Year Treasury Constant Maturity Rate', date: '2026-05-09', yield_percent: 4.97, note: 'Source: Federal Reserve Bank of St. Louis (FRED)' },
-          ),
-        },
-      },
-
-      // ── FX: current ($0.01) ───────────────────────────────────────────────────
-      'GET /api/fx/current': {
-        accepts: paymentAccepts('$0.01'),
-        description: 'LastLook Data — current exchange rate for a G10 currency pair. Source: European Central Bank.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] } }, required: ['pair'] },
-            { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', date: '2026-05-09', rate: 1.1245, base: 'EUR', quote: 'USD', note: 'Source: Frankfurter (European Central Bank)' },
-          ),
-        },
-      },
-
-      // ── FX: by date ($0.01) ───────────────────────────────────────────────────
-      'GET /api/fx/date': {
-        accepts: paymentAccepts('$0.01'),
-        description: 'LastLook Data — exchange rate for a G10 currency pair on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] }, d: { type: 'string', description: 'Date in YYYY-MM-DD format' } }, required: ['pair', 'd'] },
-            { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', date: '2026-05-09', rate: 1.1245, base: 'EUR', quote: 'USD', note: 'Source: Frankfurter (European Central Bank)' },
-          ),
-        },
-      },
-
-      // ── FX: series ($0.05/$0.10/$0.25) ───────────────────────────────────────
-      'GET /api/fx/series': {
-        accepts: paymentAccepts('$0.05'),
-        description: 'LastLook Data — historical daily exchange rates for a G10 currency pair.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] }, days: { type: 'string', description: '30, 90, or 365 days of history', enum: ['30','90','365'] } }, required: ['pair', 'days'] },
-            { service: 'LastLook Data', pair: 'EURUSD', label: 'Euro / US Dollar', days: 30, count: 21, start: '2026-04-10', end: '2026-05-09', observations: [{ date: '2026-04-10', value: 1.1102 }, { date: '2026-05-09', value: 1.1245 }], note: 'Source: Frankfurter (European Central Bank)' },
-          ),
-        },
-      },
-
-      // ── Derived: yield curve spreads ($0.03) ──────────────────────────────────
-      'GET /api/derived/yield-curve': {
-        accepts: paymentAccepts('$0.03'),
-        description: 'LastLook Data — yield curve spreads (2s10s and 3m10y) with inversion signal. Computed from FRED Treasury data.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-15', spreads: { '2s10s': { value: -0.15, inverted: true }, '3m10y': { value: 0.42, inverted: false } }, components: { DGS2: 4.85, DGS10: 4.70, DGS1MO: 4.28 }, signal: 'Partially inverted' },
-          ),
-        },
-      },
-
-      // ── Derived: Sahm Rule recession indicator ($0.02) ────────────────────────
-      'GET /api/derived/recession': {
-        accepts: paymentAccepts('$0.02'),
-        description: 'LastLook Data — real-time Sahm Rule recession indicator. Value >= 0.5 signals recession underway. Source: FRED SAHMREALTIME.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-04-01', sahm_rule: { value: 0.37, threshold: 0.50, triggered: false, signal: 'No recession signal' } },
-          ),
-        },
-      },
-
-      // ── Derived: Fed policy spread ($0.02) ────────────────────────────────────
-      'GET /api/derived/policy-spread': {
-        accepts: paymentAccepts('$0.02'),
-        description: 'LastLook Data — EFFR vs IORB spread. Shows where the effective Fed funds rate trades relative to interest on reserves.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-14', effr: 4.33, iorb: 4.40, spread: -0.07, interpretation: 'EFFR trading below IORB — within normal operating band' },
-          ),
-        },
-      },
-
-      // ── Economic calendar ($0.02) ─────────────────────────────────────────────
-      'GET /api/calendar': {
-        accepts: paymentAccepts('$0.02'),
-        description: 'LastLook Data — upcoming FRED economic data release dates. CPI, jobs, GDP, Treasury, and more. Use ?days=30|60|90.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { days: { type: 'string', description: 'Lookahead window in days', enum: ['30','60','90'] } } },
-            { service: 'LastLook Data', calendar_start: '2026-05-16', calendar_end: '2026-06-15', count: 12, releases: [{ date: '2026-05-20', release_id: 50, release_name: 'Employment Situation' }] },
-          ),
-        },
-      },
-
-      // ── Bundle: Refi Signal ($0.60) ───────────────────────────────────────────
-      'GET /api/bundle/refi-signal': {
-        accepts: paymentAccepts('$0.60'),
-        description: 'LastLook Data — refinance signal bundle: current 30yr and 15yr mortgage rates, 52-week range, MBS spread, rate trend, and refi break-even threshold. Tells an AI agent whether a borrower should consider refinancing.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'refi_signal', series: { MORTGAGE30US: 6.86, MORTGAGE15US: 6.12, DGS10: 4.46, FEDFUNDS: 4.33 }, derived: { mbs_spread: 2.40, week52_high: 7.22, week52_low: 6.41, week52_position_pct: 63, refi_breakeven_threshold: 7.61, refi_breakeven_label: 'Borrowers with existing rates above this level likely benefit from refinancing' }, signals: { rate_trend_30d: 'flat', rate_trend_90d: 'falling', rate_vs_52wk: 'mid_range', refi_environment: 'neutral' } },
-          ),
-        },
-      },
-
-      // ── Bundle: Purchase Market ($0.60) ───────────────────────────────────────
-      'GET /api/bundle/purchase-market': {
-        accepts: paymentAccepts('$0.60'),
-        description: 'LastLook Data — home purchase market bundle: current mortgage rate, median sale price, monthly payment estimate, income required to qualify, and affordability level. Directly answers whether a buyer can afford a median home.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'purchase_market', series: { MORTGAGE30US: 6.86, MSPUS: 419700, HOUST: 1378, FEDFUNDS: 4.33 }, derived: { loan_amount: 335760, monthly_payment_estimate: 2213, income_required_28pct: 94843, home_price_change_qoq: 2.1 }, signals: { affordability_level: 'elevated', market_activity: 'moderate' } },
-          ),
-        },
-      },
-
-      // ── Bundle: Rate Environment Snapshot ($0.35) ─────────────────────────────
-      'GET /api/bundle/rate-environment': {
-        accepts: paymentAccepts('$0.35'),
-        description: 'LastLook Data — rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 plus yield curve spreads and policy spread. One payment, all rate data.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'rate_environment', series: { FEDFUNDS: 4.33, SOFR: 4.31, DGS2: 3.94, DGS5: 4.01, DGS10: 4.46, DGS30: 4.97 }, derived: { spread_2s10s: 0.52, spread_3m10y: 0.18, policy_spread: -0.07 }, signals: { curve_shape: 'Normal (upward sloping)', policy_stance: 'EFFR trading below IORB — within normal operating band' } },
-          ),
-        },
-      },
-
-      // ── Bundle: Mortgage Market Pulse ($0.40) ─────────────────────────────────
-      'GET /api/bundle/mortgage-pulse': {
-        accepts: paymentAccepts('$0.40'),
-        description: 'LastLook Data — mortgage market pulse: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'mortgage_pulse', series: { MORTGAGE30US: 6.86, MORTGAGE15US: 6.12, DGS10: 4.46, FEDFUNDS: 4.33, MSPUS: 412000, HOUST: 1401 }, derived: { mbs_spread: 2.40, mbs_spread_label: '30yr mortgage minus 10Y Treasury' }, signals: { rate_trend_30d: 'flat' } },
-          ),
-        },
-      },
-
-      // ── Bundle: Macro Health Snapshot ($0.50) ─────────────────────────────────
-      'GET /api/bundle/macro': {
-        accepts: paymentAccepts('$0.50'),
-        description: 'LastLook Data — macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve spreads, and Sahm Rule recession signal. Includes cycle phase.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'macro', series: { GDP: 29350, UNRATE: 4.2, CPIAUCSL: 315.5, CPILFESL: 323.8, FEDFUNDS: 4.33 }, derived: { sahm_rule: 0.37, spread_2s10s: 0.52 }, signals: { cycle_phase: 'expansion', recession_triggered: false } },
-          ),
-        },
-      },
-
-      // ── Bundle: FX Dashboard ($0.35) ──────────────────────────────────────────
-      'GET /api/bundle/fx-dashboard': {
-        accepts: paymentAccepts('$0.35'),
-        description: 'LastLook Data — G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) plus USD strength index vs basket (30d).',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'fx_dashboard', series: { EURUSD: 1.1345, GBPUSD: 1.3512, USDJPY: 142.5, USDCHF: 0.8910, USDCAD: 1.3621, AUDUSD: 0.6445, NZDUSD: 0.5987, USDSEK: 9.82, USDNOK: 10.28 }, derived: { usd_strength_index: -2.18, usd_strength_index_label: 'Avg % change of USD vs G10 basket (30d)' }, signals: { usd_trend_30d: 'weakening' } },
-          ),
-        },
-      },
-
-      // ── Bundle: Energy & Commodities ($0.25) ──────────────────────────────────
-      'GET /api/bundle/energy': {
-        accepts: paymentAccepts('$0.25'),
-        description: 'LastLook Data — energy and commodities bundle: WTI crude, Brent crude, US regular gasoline, Henry Hub natural gas. Includes WTI-Brent spread and market signal.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'energy', series: { DCOILWTICO: 61.5, DCOILBRENTEU: 64.8, GASREGCOVW: 3.18, DHHNGSP: 3.82 }, derived: { wti_brent_spread: -3.3, wti_brent_spread_label: 'WTI minus Brent crude (USD/bbl)' }, signals: { wti_brent_signal: 'Normal contango (Brent premium)' } },
-          ),
-        },
-      },
-
-      // ── Bundle: Economic Context Brief ($0.75) ────────────────────────────────
-      'GET /api/bundle/context-brief': {
-        accepts: paymentAccepts('$0.75'),
-        description: 'LastLook Data — economic context brief: 15+ indicators across rates, inflation, employment, FX, and energy in a pre-formatted natural-language paragraph for LLM context injection.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', as_of: '2026-05-29', bundle: 'context_brief', brief: 'As of 2026-05-29: The Fed Funds Rate is 4.33%, the yield curve is +52bps (normal), 10Y Treasury at 4.46%, 30Y at 4.97%, CPI at 315.5, unemployment at 4.2%, 30yr mortgage rate 6.86% (240bps over 10Y), WTI crude $61.50/bbl, Brent $64.80/bbl, EUR/USD 1.1345, USD/JPY 142.5, Sahm Rule 0.37 (below 0.50 threshold).', series: { FEDFUNDS: 4.33, DGS10: 4.46, DGS30: 4.97, MORTGAGE30US: 6.86, UNRATE: 4.2, CPIAUCSL: 315.5, DCOILWTICO: 61.5 } },
-          ),
-        },
-      },
-
-      // ── Crypto: single coin price ($0.02) ─────────────────────────────────────
-      'GET /api/crypto/price': {
-        accepts: paymentAccepts('$0.02'),
-        description: 'LastLook Data — current price, 24h change, market cap, and volume for any supported cryptocurrency. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] } }, required: ['coin'] },
-            { service: 'LastLook Data', symbol: 'BTC', name: 'Bitcoin', price_usd: 67500.5, change_24h_pct: 2.43, market_cap_usd: 1332000000000, volume_24h_usd: 28500000000, as_of: '2026-06-23T12:00:00Z', source: 'CoinGecko' },
-          ),
-        },
-      },
-
-      // ── Crypto: historical prices ($0.15) ─────────────────────────────────────
-      'GET /api/crypto/history': {
-        accepts: paymentAccepts('$0.15'),
-        description: 'LastLook Data — historical daily closing prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] }, days: { type: 'string', description: '30, 90, or 365 days of history', enum: ['30','90','365'] } }, required: ['coin', 'days'] },
-            { service: 'LastLook Data', symbol: 'BTC', name: 'Bitcoin', days: 30, count: 30, start: '2026-05-24', end: '2026-06-23', observations: [{ date: '2026-05-24', price_usd: 65000.0 }, { date: '2026-06-23', price_usd: 67500.5 }], source: 'CoinGecko' },
-          ),
-        },
-      },
-
-      // ── Bundle: Crypto Top 20 ($0.50) ─────────────────────────────────────────
-      'GET /api/bundle/crypto': {
-        accepts: paymentAccepts('$0.50'),
-        description: 'LastLook Data — top 20 cryptocurrencies by market cap: price, 24h change, 7d change, market cap, and volume in one call. Source: CoinGecko.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            null,
-            { service: 'LastLook Data', bundle: 'crypto', as_of: '2026-06-23T12:00:00Z', count: 20, coins: [{ rank: 1, symbol: 'BTC', name: 'Bitcoin', price_usd: 67500.5, change_24h_pct: 2.43, change_7d_pct: -1.2, market_cap_usd: 1332000000000, volume_24h_usd: 28500000000 }], source: 'CoinGecko' },
-          ),
-        },
-      },
-
-      // ── EDGAR: company fundamentals ($0.75) ───────────────────────────────────
-      'GET /api/edgar/company': {
-        accepts: paymentAccepts('$0.75'),
-        description: 'LastLook Data — company financial fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, and EPS from 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|AMZN|NVDA|GOOGL|META|etc.',
-        mimeType: 'application/json',
-        extensions: {
-          ...lastlookExtension(
-            { type: 'object', properties: { ticker: { type: 'string', description: 'Stock ticker symbol e.g. AAPL, MSFT, TSLA, AMZN, NVDA, GOOGL, META' } }, required: ['ticker'] },
-            { service: 'LastLook Data', ticker: 'AAPL', company_name: 'APPLE INC', cik: '0000320193', fundamentals: { revenue: { annual: [{ period_end: '2023-09-30', value: 383285000000, fiscal_year: 2023 }], quarterly: [{ period_end: '2024-03-30', value: 90753000000, fiscal_period: 'Q2' }] }, net_income: { annual: [{ period_end: '2023-09-30', value: 96995000000 }] }, total_assets: { annual: [{ period_end: '2023-09-30', value: 352583000000 }] } }, as_of: '2026-06-23', source: 'SEC EDGAR (XBRL)' },
-          ),
-        },
-      },
+const paymentRoutes = {};
+for (const r of PAID_ROUTES) {
+  paymentRoutes[`GET ${r.path}`] = {
+    accepts: paymentAccepts(`$${r.price}`),
+    description: `LastLook Data — ${r.description}`,
+    mimeType: 'application/json',
+    extensions: {
+      ...lastlookExtension(
+        r.params ? { type: 'object', properties: r.params.properties, required: r.params.required } : null,
+        r.example,
+      ),
     },
-    server,
-  )
-);
+  };
+}
+
+app.use(paymentMiddleware(paymentRoutes, server));
 
 // ── FRED helpers ──────────────────────────────────────────────────────────────
 
@@ -601,74 +282,6 @@ async function fetchCoinPrice(symbol) {
   };
   cache.set(cacheKey, result, 60); // 1-min TTL for prices
   return result;
-}
-
-// ── Solana-on-Base (bridged SOL) as an alternate payment asset ────────────────
-// Official Base<->Solana bridge: bridging SOL from Solana mints this ERC-20 on Base.
-// https://docs.base.org/base-chain/network-information/base-solana-bridge
-// Verified contract, 9 decimals (matches Solana's native precision). No EIP-3009 /
-// EIP-2612 on this token, so it settles through x402's Permit2 fallback (CDP
-// facilitator docs confirm support for "all ERC-20 tokens on its EVM networks
-// through EIP-3009 or Permit2").
-const SOL_BASE_ADDRESS = '0x311935Cd80B76769bF2ecC9D8Ab7635b2139cf82';
-const SOL_BASE_DECIMALS = 9;
-
-// Dollar-string pricing ("$0.01") only auto-resolves to a network's DEFAULT asset
-// (USDC on Base) -- there's no built-in USD conversion for a non-default asset, so
-// we track a live SOL/USD price ourselves and compute the atomic token amount per
-// request via a getter (see solAccept below), instead of freezing an amount at
-// server boot that would drift as SOL's price moves.
-let solUsdPriceSync = null;
-
-async function refreshSolUsdPrice() {
-  try {
-    const response = await axios.get(`${COINGECKO_BASE}/simple/price`, {
-      params: { ids: 'solana', vs_currencies: 'usd' },
-      timeout: 5000,
-    });
-    const price = response.data?.solana?.usd;
-    if (typeof price === 'number' && price > 0) solUsdPriceSync = price;
-  } catch (err) {
-    console.error('[SOL pricing] CoinGecko refresh failed, keeping last known price:', err.message);
-  }
-}
-refreshSolUsdPrice().catch(() => {}); // prime at boot
-setInterval(() => refreshSolUsdPrice().catch(() => {}), 60_000);
-
-// Safety fallback only -- covers the first seconds after boot (before the first
-// CoinGecko fetch resolves) or an extended CoinGecko outage. It bounds worst-case
-// mispricing during those windows; it does not set day-to-day pricing. Nudge this
-// occasionally if SOL's price has moved a lot since it was last updated.
-const SOL_USD_BOOT_FALLBACK = 99.3;
-
-// Second `accepts` entry for a route: pay the same USD-equivalent price in
-// Solana-on-Base instead of USDC. `price` is a getter so it's recomputed fresh on
-// every request from the live-refreshed solUsdPriceSync, not baked in once at startup.
-function solAccept(usdString) {
-  const usdAmount = parseFloat(usdString.replace(/^\$/, ''));
-  return {
-    scheme: 'exact',
-    network: 'eip155:8453',
-    payTo: WALLET_ADDRESS,
-    get price() {
-      const solUsd = solUsdPriceSync || SOL_USD_BOOT_FALLBACK;
-      const solAmountDecimal = usdAmount / solUsd;
-      return {
-        amount: convertToTokenAmount(numberToDecimalString(solAmountDecimal), SOL_BASE_DECIMALS),
-        asset: SOL_BASE_ADDRESS,
-        extra: { assetTransferMethod: 'permit2' },
-      };
-    },
-  };
-}
-
-// Every paid route's `accepts` array: USDC (default asset, unchanged behavior) plus
-// the SOL option above. Payers/agents choose whichever asset they hold.
-function paymentAccepts(usdString) {
-  return [
-    { scheme: 'exact', price: usdString, network: 'eip155:8453', payTo: WALLET_ADDRESS },
-    solAccept(usdString),
-  ];
 }
 
 async function fetchCryptoMarkets(perPage = 20) {
@@ -818,49 +431,24 @@ function todayISO() {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+const PAY_TO = { base: WALLET_ADDRESS, solana: SOLANA_WALLET_ADDRESS || null };
+
 app.get('/', (req, res) => {
-  if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, 'https://www.lastlookdata.com');
+  if (req.accepts('html') && !req.accepts('json')) return res.redirect(301, SERVICE.website);
   res.json({
-    service: 'LastLook Data',
-    version: '2.13.0',
-    description: 'Financial market data for AI agents — Treasury yields, mortgage rates, FX rates, energy prices, macro indicators, crypto prices (CoinGecko), and company fundamentals (SEC EDGAR). Pay per query via x402.',
-    website: 'https://www.lastlookdata.com',
-    openapi: 'https://api.lastlookdata.com/openapi.json',
+    service: SERVICE.name,
+    version: SERVICE.version,
+    description: SERVICE.description,
+    website: SERVICE.website,
+    openapi: `${SERVICE.apiBase}/openapi.json`,
+    mcp: SERVICE.mcpUrl,
     x402: {
-      manifest: 'https://api.lastlookdata.com/.well-known/x402.json',
+      manifest: `${SERVICE.apiBase}/.well-known/x402.json`,
       version: 2,
-      network: 'eip155:8453',
       currency: 'USDC',
-      accepted_assets: ['USDC', 'SOL (bridged, Base)'],
+      networks: acceptedNetworks(PAY_TO).map(n => ({ network: n.network, label: n.label, asset: n.asset })),
     },
-    resources: [
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/current',      description: 'Most recent value for any supported FRED series (Treasury yields, mortgage rates, CPI, unemployment, energy prices, benchmark rates). Use ?id=SERIES_ID.',  price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/date',         description: 'FRED series value on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD.',                                                                                          price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/series/30',    description: 'Last 30 days of any supported FRED series. Use ?id=SERIES_ID.',                                                                                                    price: '0.05', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/series/90',    description: 'Last 90 days of any supported FRED series. Use ?id=SERIES_ID.',                                                                                                    price: '0.10', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/series/365',   description: 'Last 365 days of any supported FRED series. Use ?id=SERIES_ID.',                                                                                                   price: '0.25', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/treasury/current', description: 'Current Treasury yield curve — all maturities (1M, 2Y, 5Y, 10Y, 30Y) in one call.',                                                                         price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/treasury/date',    description: 'Treasury yield curve on a specific date. Use ?d=YYYY-MM-DD.',                                                                                                 price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/fx/current',   description: 'Current G10 FX rate. Use ?pair=EURUSD, GBPUSD, USDJPY, etc.',                                                                                                     price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/fx/date',      description: 'G10 FX rate on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.',                                                                                                  price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/fx/series',    description: 'Historical G10 FX rate series. Use ?pair=EURUSD&days=30 (or 90, 365).',                                                                                           price: '0.05', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/yield-curve',   description: 'Yield curve spreads (2s10s and 3m10y) with inversion signal computed from live FRED data.',                                                              price: '0.03', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/recession',     description: 'Real-Time Sahm Rule recession indicator — current value, threshold, triggered flag, and signal.',                                                        price: '0.03', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/derived/policy-spread', description: 'Fed policy spread — EFFR vs IORB with interpretation of monetary policy stance.',                                                                        price: '0.03', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/calendar',     description: 'Upcoming economic events — next FOMC meeting date and CPI release date.',                                                                                         price: '0.01', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/refi-signal',       description: 'Refinance signal — current 30yr/15yr rates, 52-week range, MBS spread, rate trend, and refi break-even threshold. Tells an AI agent whether a borrower should consider refinancing.',  price: '0.60', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/purchase-market',  description: 'Home purchase market — median sale price, monthly payment estimate on median home (20% down), income required to qualify at 28% DTI, affordability level, housing starts.',      price: '0.60', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/rate-environment', description: 'Rate environment snapshot — FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and policy spread. One payment, all rate data.',                  price: '0.35', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/mortgage-pulse',   description: 'Mortgage market pulse — 30yr/15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',           price: '0.40', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/macro',            description: 'Macro health snapshot — GDP, unemployment, CPI, core CPI, Fed funds, yield curve, and Sahm Rule recession signal with cycle phase interpretation.',             price: '0.50', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/fx-dashboard',     description: 'G10 FX dashboard — all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) with USD strength index vs basket (30d).',      price: '0.35', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/energy',           description: 'Energy and commodities bundle — WTI crude, Brent crude, US gasoline, Henry Hub natural gas with WTI-Brent spread and market signal.',                         price: '0.25', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/context-brief',    description: 'Economic context brief — 15+ indicators in a pre-formatted natural-language paragraph ready for LLM context injection. Covers rates, inflation, FX, energy.',  price: '0.75', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/crypto/price',           description: 'Current price, 24h change, market cap, and volume for any supported crypto. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',         price: '0.02', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/crypto/history',         description: 'Historical daily prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',                                                         price: '0.15', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/bundle/crypto',          description: 'Top 20 cryptocurrencies by market cap — price, 24h change, 7d change, market cap, volume in one call. Source: CoinGecko.',                                          price: '0.50', currency: 'USDC' },
-      { method: 'GET', url: 'https://api.lastlookdata.com/api/edgar/company',          description: 'Company fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, EPS. 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|etc.',   price: '0.75', currency: 'USDC' },
-    ],
+    resources: buildResourceList(),
     supported_series: {
       treasury:        ['DGS30', 'DGS10', 'DGS5', 'DGS2', 'DGS1MO'],
       mortgage_housing:['MORTGAGE30US', 'MORTGAGE15US', 'MSPUS', 'HOUST'],
@@ -873,289 +461,48 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LastLook Data', version: '2.13.0' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: SERVICE.name, version: SERVICE.version }));
 
 app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: __dirname }));
 
-app.get('/openapi.json', (req, res) => res.sendFile('openapi.json', { root: __dirname }));
-app.get('/agent.json', (req, res) => res.sendFile('agent.json', { root: __dirname }));
-app.get('/.well-known/agent.json', (req, res) => res.sendFile('agent.json', { root: __dirname }));
+// Discovery documents are generated from routes.js so they can never drift from
+// the live payment config. `npm run gen:docs` writes the same output to disk.
+const OPENAPI_DOC = buildOpenApi(PAY_TO);
+const AGENT_DOC = buildAgentJson(PAY_TO);
+const X402_DOC = buildX402Manifest(PAY_TO);
+app.get('/openapi.json', (req, res) => res.json(OPENAPI_DOC));
+app.get(['/agent.json', '/.well-known/agent.json'], (req, res) => res.json(AGENT_DOC));
+app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json(X402_DOC));
 
-app.get(['/.well-known/x402', '/.well-known/x402.json'], (req, res) => res.json({
-  name: 'LastLook Data',
-  description: 'Financial market data for AI agents — Treasury yields, mortgage rates, energy prices, FX rates, and macro indicators. Pay per query via x402. No API keys or accounts required.',
-  logo_url: 'https://api.lastlookdata.com/logo.png',
-  url: 'https://www.lastlookdata.com',
-  website: 'https://www.lastlookdata.com',
-  docs: 'https://www.lastlookdata.com/docs',
-  openapi: 'https://api.lastlookdata.com/openapi.json',
-  category: 'finance',
-  version: '1.0',
-  base_url: 'https://api.lastlookdata.com',
-  content_type: 'application/json',
-  payment: { protocol: 'x402', network: 'eip155:8453', asset: 'USDC', alternate_assets: [{ symbol: 'SOL', label: 'Solana (bridged, Base)', address: SOL_BASE_ADDRESS }] },
-  resources: [
-    {
-      name: 'FRED Series — Current Value',
-      url: 'https://api.lastlookdata.com/api/current',
-      method: 'GET',
-      description: 'Most recent value for any supported FRED series. Use ?id= with DGS10, MORTGAGE30US, FEDFUNDS, IORB, EFFR, CPIAUCSL, UNRATE, DCOILWTICO, etc.',
-      price: '0.01',
-      currency: 'USDC',
-      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
-    },
-    {
-      name: 'FRED Series — Value by Date',
-      url: 'https://api.lastlookdata.com/api/date',
-      method: 'GET',
-      description: 'FRED series value for a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.',
-      price: '0.01',
-      currency: 'USDC',
-      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: {
-        id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] },
-        d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-      },
-    },
-    {
-      name: 'FRED Series — Last 30 Days',
-      url: 'https://api.lastlookdata.com/api/series/30',
-      method: 'GET',
-      description: 'Last 30 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
-      price: '0.05',
-      currency: 'USDC',
-      pricing: { amount: '0.05', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
-    },
-    {
-      name: 'FRED Series — Last 90 Days',
-      url: 'https://api.lastlookdata.com/api/series/90',
-      method: 'GET',
-      description: 'Last 90 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
-      price: '0.10',
-      currency: 'USDC',
-      pricing: { amount: '0.10', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
-    },
-    {
-      name: 'FRED Series — Last 365 Days',
-      url: 'https://api.lastlookdata.com/api/series/365',
-      method: 'GET',
-      description: 'Last 365 days of observations for any supported FRED series. Use ?id=SERIES_ID.',
-      price: '0.25',
-      currency: 'USDC',
-      pricing: { amount: '0.25', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { id: { type: 'string', description: 'FRED series ID', enum: ['DGS30','DGS10','DGS5','DGS2','DGS1MO','MORTGAGE30US','MORTGAGE15US','MSPUS','HOUST','FEDFUNDS','SOFR','DPRIME','DTB3','IORB','EFFR','CPIAUCSL','CPILFESL','UNRATE','GDP','DCOILWTICO','DCOILBRENTEU','GASREGCOVW','DHHNGSP','SAHMREALTIME'] } },
-    },
-    {
-      name: 'G10 FX Rate — Current',
-      url: 'https://api.lastlookdata.com/api/fx/current',
-      method: 'GET',
-      description: 'Current exchange rate for any G10 currency pair. Use ?pair=EURUSD, USDJPY, GBPUSD, etc. Source: ECB.',
-      price: '0.01',
-      currency: 'USDC',
-      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] } },
-    },
-    {
-      name: 'G10 FX Rate — By Date',
-      url: 'https://api.lastlookdata.com/api/fx/date',
-      method: 'GET',
-      description: 'G10 exchange rate for a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD. Source: ECB.',
-      price: '0.01',
-      currency: 'USDC',
-      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: {
-        pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
-        d: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-      },
-    },
-    {
-      name: 'G10 FX Rate — Historical Series',
-      url: 'https://api.lastlookdata.com/api/fx/series',
-      method: 'GET',
-      description: 'Historical daily exchange rates for a G10 currency pair. Use ?pair=EURUSD&days=30|90|365. Source: ECB.',
-      price: '0.05',
-      currency: 'USDC',
-      pricing: { amount: '0.05', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: {
-        pair: { type: 'string', description: 'G10 currency pair', enum: ['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD','USDSEK','USDNOK'] },
-        days: { type: 'string', description: 'History window', enum: ['30','90','365'] },
-      },
-    },
-    {
-      name: '30-Year Treasury Yield — Current',
-      url: 'https://api.lastlookdata.com/api/treasury/current',
-      method: 'GET',
-      description: 'Most recent 30-year US Treasury constant maturity yield (DGS30). Source: FRED.',
-      price: '0.01',
-      currency: 'USDC',
-      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: '30-Year Treasury Yield — By Date',
-      url: 'https://api.lastlookdata.com/api/treasury/date',
-      method: 'GET',
-      description: '30-year US Treasury yield for a specific date. Use ?d=YYYY-MM-DD.',
-      price: '0.01',
-      currency: 'USDC',
-      pricing: { amount: '0.01', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { d: { type: 'string', description: 'Date in YYYY-MM-DD format' } },
-    },
-    {
-      name: 'Yield Curve Spreads',
-      url: 'https://api.lastlookdata.com/api/derived/yield-curve',
-      method: 'GET',
-      description: '2s10s and 3m10y Treasury yield curve spreads with inversion signal. Computed from FRED data.',
-      price: '0.03',
-      currency: 'USDC',
-      pricing: { amount: '0.03', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Sahm Rule Recession Indicator',
-      url: 'https://api.lastlookdata.com/api/derived/recession',
-      method: 'GET',
-      description: 'Real-time Sahm Rule recession indicator. Value >= 0.50 signals recession underway. Source: FRED SAHMREALTIME.',
-      price: '0.02',
-      currency: 'USDC',
-      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Fed Policy Spread (EFFR vs IORB)',
-      url: 'https://api.lastlookdata.com/api/derived/policy-spread',
-      method: 'GET',
-      description: 'Effective Fed funds rate vs interest on reserves spread, with interpretation. Source: FRED.',
-      price: '0.02',
-      currency: 'USDC',
-      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Economic Calendar',
-      url: 'https://api.lastlookdata.com/api/calendar',
-      method: 'GET',
-      description: 'Upcoming FRED economic data release dates — CPI, jobs, GDP, Treasury rates, and more. Use ?days=30|60|90.',
-      price: '0.02',
-      currency: 'USDC',
-      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { days: { type: 'string', description: 'Lookahead window', enum: ['30','60','90'] } },
-    },
-    {
-      name: 'Bundle — Refi Signal',
-      url: 'https://api.lastlookdata.com/api/bundle/refi-signal',
-      method: 'GET',
-      description: 'Refinance signal: current 30yr/15yr mortgage rates, 52-week high/low, MBS spread, rate trend, and refi break-even threshold. Answers whether a borrower should consider refinancing.',
-      price: '0.60',
-      currency: 'USDC',
-      pricing: { amount: '0.60', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — Purchase Market',
-      url: 'https://api.lastlookdata.com/api/bundle/purchase-market',
-      method: 'GET',
-      description: 'Home purchase market: median sale price, monthly P&I payment estimate on median home (20% down), annual income required at 28% DTI, affordability level, and housing starts.',
-      price: '0.60',
-      currency: 'USDC',
-      pricing: { amount: '0.60', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — Rate Environment Snapshot',
-      url: 'https://api.lastlookdata.com/api/bundle/rate-environment',
-      method: 'GET',
-      description: 'Rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and Fed policy spread. One payment.',
-      price: '0.35',
-      currency: 'USDC',
-      pricing: { amount: '0.35', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — Mortgage Market Pulse',
-      url: 'https://api.lastlookdata.com/api/bundle/mortgage-pulse',
-      method: 'GET',
-      description: 'Mortgage market pulse: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.',
-      price: '0.40',
-      currency: 'USDC',
-      pricing: { amount: '0.40', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — Macro Health Snapshot',
-      url: 'https://api.lastlookdata.com/api/bundle/macro',
-      method: 'GET',
-      description: 'Macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve, and Sahm Rule with cycle phase interpretation.',
-      price: '0.50',
-      currency: 'USDC',
-      pricing: { amount: '0.50', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — G10 FX Dashboard',
-      url: 'https://api.lastlookdata.com/api/bundle/fx-dashboard',
-      method: 'GET',
-      description: 'G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) with USD strength index vs basket.',
-      price: '0.35',
-      currency: 'USDC',
-      pricing: { amount: '0.35', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — Energy & Commodities',
-      url: 'https://api.lastlookdata.com/api/bundle/energy',
-      method: 'GET',
-      description: 'Energy and commodities bundle: WTI crude, Brent crude, US regular gasoline, Henry Hub natural gas. Includes WTI-Brent spread.',
-      price: '0.25',
-      currency: 'USDC',
-      pricing: { amount: '0.25', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Bundle — Economic Context Brief',
-      url: 'https://api.lastlookdata.com/api/bundle/context-brief',
-      method: 'GET',
-      description: '15+ indicators across rates, inflation, employment, FX, and energy in a pre-formatted natural-language paragraph for LLM context injection.',
-      price: '0.75',
-      currency: 'USDC',
-      pricing: { amount: '0.75', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'Crypto — Current Price',
-      url: 'https://api.lastlookdata.com/api/crypto/price',
-      method: 'GET',
-      description: 'Current price, 24h change, market cap, and volume for any supported cryptocurrency. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.',
-      price: '0.02',
-      currency: 'USDC',
-      pricing: { amount: '0.02', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] } },
-    },
-    {
-      name: 'Crypto — Historical Prices',
-      url: 'https://api.lastlookdata.com/api/crypto/history',
-      method: 'GET',
-      description: 'Historical daily prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.',
-      price: '0.15',
-      currency: 'USDC',
-      pricing: { amount: '0.15', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: {
-        coin: { type: 'string', description: 'Crypto symbol', enum: ['BTC','ETH','SOL','BNB','XRP','USDT','USDC','ADA','AVAX','DOGE','DOT','MATIC','LINK','LTC','ATOM','UNI','SUI','APT','NEAR','PEPE'] },
-        days: { type: 'string', description: 'History window', enum: ['30','90','365'] },
-      },
-    },
-    {
-      name: 'Bundle — Crypto Top 20',
-      url: 'https://api.lastlookdata.com/api/bundle/crypto',
-      method: 'GET',
-      description: 'Top 20 cryptocurrencies by market cap — price, 24h change, 7d change, market cap, and volume in one call. Source: CoinGecko.',
-      price: '0.50',
-      currency: 'USDC',
-      pricing: { amount: '0.50', currency: 'USDC', network: 'Base', scheme: 'exact' },
-    },
-    {
-      name: 'EDGAR — Company Fundamentals',
-      url: 'https://api.lastlookdata.com/api/edgar/company',
-      method: 'GET',
-      description: 'Company financial fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, and EPS from 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|AMZN|NVDA|GOOGL|META|etc.',
-      price: '0.75',
-      currency: 'USDC',
-      pricing: { amount: '0.75', currency: 'USDC', network: 'Base', scheme: 'exact' },
-      schema: { ticker: { type: 'string', description: 'Stock ticker symbol e.g. AAPL, MSFT, TSLA, AMZN, NVDA' } },
-    },
-  ],
-}));
+// ── Mortgage tools: refinance calculator + offer grader ─────────────────────
+
+async function mortgageBenchmark(params) {
+  return mortgageTools.resolveBenchmark(params, fetchFredSeries, todayISO(), daysAgoISO(30));
+}
+
+app.get('/api/calc/refi', async (req, res) => {
+  let inp;
+  try { inp = mortgageTools.parseRefiInputs(req.query); }
+  catch (err) { return res.status(400).json({ error: err.message, docs: `${SERVICE.apiBase}/openapi.json` }); }
+  try {
+    const market = await mortgageBenchmark({ term: inp.newTerm, loanType: 'conventional', creditScore: inp.creditScore, ltv: inp.ltv });
+    const result = mortgageTools.computeRefi(inp, market);
+    res.json({ service: SERVICE.name, tool: 'refi_calculator', as_of: market.benchmark_date, market, ...result,
+      disclaimer: 'Estimates for principal and interest only (excludes taxes, insurance, PMI). Not a loan offer or financial advice.' });
+  } catch (err) { res.status(502).json({ error: 'Failed to compute refinance analysis', detail: err.message }); }
+});
+
+app.get('/api/grade/offer', async (req, res) => {
+  let inp;
+  try { inp = mortgageTools.parseOfferInputs(req.query); }
+  catch (err) { return res.status(400).json({ error: err.message, docs: `${SERVICE.apiBase}/openapi.json` }); }
+  try {
+    const market = await mortgageBenchmark({ term: inp.term, loanType: inp.loanType, creditScore: inp.creditScore, ltv: inp.ltv });
+    const result = mortgageTools.computeOfferGrade(inp, market);
+    res.json({ service: SERVICE.name, tool: 'offer_grader', as_of: market.benchmark_date, ...result, market,
+      disclaimer: 'Compares the offered rate to market averages of locked rates; individual pricing varies with property, occupancy, lock period and lender. Not a loan offer or financial advice.' });
+  } catch (err) { res.status(502).json({ error: 'Failed to grade offer', detail: err.message }); }
+});
 
 // ── FRED: current value ───────────────────────────────────────────────────────
 

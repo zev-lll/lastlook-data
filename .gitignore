@@ -1,1 +1,14 @@
 node_modules
+
+# Secrets — never commit
+.env
+.env.*
+*.rtf
+keys*.txt
+*.pem
+*.key
+
+# Local scratch / OS files
+.DS_Store
+_to_delete/
+.claude/

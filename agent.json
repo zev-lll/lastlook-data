@@ -1,110 +1,243 @@
 {
   "schema_version": "1.0",
-  "version": "2.10.0",
+  "version": "2.14.0",
   "name": "LastLook Data",
-  "description": "Financial market data and derived market indicators for AI agents — FRED macro data, G10 FX rates, energy prices, yield curve spreads, recession signals, Fed policy spread, and economic calendar. Pay per query via x402, no accounts or API keys required.",
+  "description": "Financial market data and mortgage decision tools for AI agents — Treasury yields, mortgage rates, a refinance calculator and mortgage offer grader, FX, energy, macro indicators, crypto prices, and company fundamentals. Pay per query via x402 (USDC on Base or Solana). No accounts or API keys.",
   "url": "https://www.lastlookdata.com",
   "logo": "https://api.lastlookdata.com/logo.png",
+  "contact": "hello@lastlookdata.com",
   "api_base": "https://api.lastlookdata.com",
+  "openapi": "https://api.lastlookdata.com/openapi.json",
+  "x402_manifest": "https://api.lastlookdata.com/.well-known/x402.json",
   "mcp_server": "https://mcp.lastlookdata.com/mcp",
   "payment": {
     "protocol": "x402",
     "version": "2",
-    "network": "eip155:8453",
-    "currency": "USDC"
-  },
-  "endpoint_pattern": {
-    "current_value": "GET /api/current?id=SERIES_ID — $0.01",
-    "value_by_date": "GET /api/date?id=SERIES_ID&d=YYYY-MM-DD — $0.01",
-    "last_30_days": "GET /api/series/30?id=SERIES_ID — $0.05",
-    "last_90_days": "GET /api/series/90?id=SERIES_ID — $0.10",
-    "last_365_days": "GET /api/series/365?id=SERIES_ID — $0.25",
-    "fx_current": "GET /api/fx/current?pair=PAIR — $0.01",
-    "fx_by_date": "GET /api/fx/date?pair=PAIR&d=YYYY-MM-DD — $0.01",
-    "fx_series": "GET /api/fx/series?pair=PAIR&days=N — $0.05/$0.10/$0.25"
+    "asset": "USDC",
+    "networks": [
+      {
+        "network": "eip155:8453",
+        "label": "Base",
+        "pay_to": "0xB4848d1b4b7E31B75b9b30d717F89777dC65D68e"
+      }
+    ]
   },
   "endpoints": [
-    { "path": "/api/current",               "method": "GET", "description": "Most recent value for any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.01 },
-    { "path": "/api/date",                  "method": "GET", "description": "FRED series value on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD.", "price_usdc": 0.01 },
-    { "path": "/api/series/30",             "method": "GET", "description": "Last 30 days of any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.05 },
-    { "path": "/api/series/90",             "method": "GET", "description": "Last 90 days of any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.10 },
-    { "path": "/api/series/365",            "method": "GET", "description": "Last 365 days of any supported FRED series. Use ?id=SERIES_ID.", "price_usdc": 0.25 },
-    { "path": "/api/treasury/current",      "method": "GET", "description": "Current Treasury yield curve — all maturities (1M, 2Y, 5Y, 10Y, 30Y) in one call.", "price_usdc": 0.01 },
-    { "path": "/api/treasury/date",         "method": "GET", "description": "Treasury yield curve on a specific date. Use ?d=YYYY-MM-DD.", "price_usdc": 0.01 },
-    { "path": "/api/fx/current",            "method": "GET", "description": "Current G10 FX rate. Use ?pair=EURUSD, GBPUSD, USDJPY, etc.", "price_usdc": 0.01 },
-    { "path": "/api/fx/date",               "method": "GET", "description": "G10 FX rate on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.", "price_usdc": 0.01 },
-    { "path": "/api/fx/series",             "method": "GET", "description": "Historical G10 FX rate series. Use ?pair=EURUSD&days=30 (or 90, 365).", "price_usdc": 0.05 },
-    { "path": "/api/derived/yield-curve",   "method": "GET", "description": "2s10s and 3m10y Treasury yield curve spreads with inversion signal.", "price_usdc": 0.03 },
-    { "path": "/api/derived/recession",     "method": "GET", "description": "Real-Time Sahm Rule recession indicator. Value >= 0.50 signals recession.", "price_usdc": 0.03 },
-    { "path": "/api/derived/policy-spread", "method": "GET", "description": "EFFR vs IORB spread with plain-English interpretation of Fed policy stance.", "price_usdc": 0.03 },
-    { "path": "/api/calendar",              "method": "GET", "description": "Upcoming FOMC meeting date and CPI release date.", "price_usdc": 0.01 },
-    { "path": "/api/bundle/rate-environment", "method": "GET", "description": "Rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 with yield curve spreads and policy spread. One payment.", "price_usdc": 0.35 },
-    { "path": "/api/bundle/mortgage-pulse",   "method": "GET", "description": "Mortgage market pulse: 30yr/15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. MBS spread and rate trend.", "price_usdc": 0.40 },
-    { "path": "/api/bundle/macro",            "method": "GET", "description": "Macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve, Sahm Rule. Includes cycle phase signal.", "price_usdc": 0.50 },
-    { "path": "/api/bundle/fx-dashboard",     "method": "GET", "description": "G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) plus USD strength index.", "price_usdc": 0.35 },
-    { "path": "/api/bundle/energy",           "method": "GET", "description": "Energy and commodities bundle: WTI crude, Brent crude, US gasoline, Henry Hub natural gas. WTI-Brent spread included.", "price_usdc": 0.25 },
-    { "path": "/api/bundle/context-brief",    "method": "GET", "description": "Economic context brief: 15+ indicators in a pre-formatted natural-language paragraph for LLM context injection.", "price_usdc": 0.75 }
+    {
+      "path": "/api/calc/refi?current_rate=&balance=",
+      "method": "GET",
+      "category": "Mortgage Tools",
+      "description": "Refinance calculator priced against today's market. Give the current rate, balance and remaining term; get new monthly payment, monthly savings, break-even month, net benefit over the years you expect to stay, and a plain verdict. New rate defaults to the live Optimal Blue locked-rate index for the borrower's credit/LTV segment.",
+      "price_usdc": 0.35
+    },
+    {
+      "path": "/api/grade/offer?rate=&loan_amount=",
+      "method": "GET",
+      "category": "Mortgage Tools",
+      "description": "Grades a written mortgage offer (rate, points, lender fees) against the live Optimal Blue locked-rate index for the same product, term, credit score and LTV. Returns a letter grade, spread vs market in basis points, monthly and total-over-horizon cost vs market, and a plain-language verdict.",
+      "price_usdc": 0.5
+    },
+    {
+      "path": "/api/current?id=",
+      "method": "GET",
+      "category": "FRED",
+      "description": "Most recent value for any supported FRED series. Use ?id=IORB, ?id=EFFR, ?id=MORTGAGE30US, ?id=FEDFUNDS, ?id=DGS10, etc.",
+      "price_usdc": 0.01
+    },
+    {
+      "path": "/api/date?id=&d=",
+      "method": "GET",
+      "category": "FRED",
+      "description": "Value for any supported FRED series on a specific date. Use ?id=SERIES_ID&d=YYYY-MM-DD. Business days only.",
+      "price_usdc": 0.01
+    },
+    {
+      "path": "/api/series/30?id=",
+      "method": "GET",
+      "category": "FRED",
+      "description": "Last 30 days of any FRED series. Use for mortgage rates, Fed funds, IORB, EFFR, Treasury yields, CPI, energy prices, and more.",
+      "price_usdc": 0.05
+    },
+    {
+      "path": "/api/series/90?id=",
+      "method": "GET",
+      "category": "FRED",
+      "description": "Last 90 days of any supported FRED series.",
+      "price_usdc": 0.1
+    },
+    {
+      "path": "/api/series/365?id=",
+      "method": "GET",
+      "category": "FRED",
+      "description": "Last 365 days of any supported FRED series.",
+      "price_usdc": 0.25
+    },
+    {
+      "path": "/api/treasury/current",
+      "method": "GET",
+      "category": "FRED",
+      "description": "Current 30-year US Treasury yield (DGS30). Alias for /api/current?id=DGS30.",
+      "price_usdc": 0.01
+    },
+    {
+      "path": "/api/treasury/date?d=",
+      "method": "GET",
+      "category": "FRED",
+      "description": "30-year Treasury yield for a specific date. Alias for /api/date?id=DGS30&d=YYYY-MM-DD.",
+      "price_usdc": 0.01
+    },
+    {
+      "path": "/api/fx/current?pair=",
+      "method": "GET",
+      "category": "FX",
+      "description": "Current exchange rate for a G10 currency pair. Source: European Central Bank.",
+      "price_usdc": 0.01
+    },
+    {
+      "path": "/api/fx/date?pair=&d=",
+      "method": "GET",
+      "category": "FX",
+      "description": "Exchange rate for a G10 currency pair on a specific date. Use ?pair=EURUSD&d=YYYY-MM-DD.",
+      "price_usdc": 0.01
+    },
+    {
+      "path": "/api/fx/series?pair=&days=",
+      "method": "GET",
+      "category": "FX",
+      "description": "Historical daily exchange rates for a G10 currency pair.",
+      "price_usdc": 0.05
+    },
+    {
+      "path": "/api/derived/yield-curve",
+      "method": "GET",
+      "category": "Derived",
+      "description": "Yield curve spreads (2s10s and 3m10y) with inversion signal. Computed from FRED Treasury data.",
+      "price_usdc": 0.03
+    },
+    {
+      "path": "/api/derived/recession",
+      "method": "GET",
+      "category": "Derived",
+      "description": "Real-time Sahm Rule recession indicator. Value >= 0.5 signals recession underway. Source: FRED SAHMREALTIME.",
+      "price_usdc": 0.02
+    },
+    {
+      "path": "/api/derived/policy-spread",
+      "method": "GET",
+      "category": "Derived",
+      "description": "EFFR vs IORB spread. Shows where the effective Fed funds rate trades relative to interest on reserves.",
+      "price_usdc": 0.02
+    },
+    {
+      "path": "/api/calendar?",
+      "method": "GET",
+      "category": "Calendar",
+      "description": "Upcoming FRED economic data release dates. CPI, jobs, GDP, Treasury, and more. Use ?days=30|60|90.",
+      "price_usdc": 0.02
+    },
+    {
+      "path": "/api/bundle/refi-signal",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Refinance signal bundle: current 30yr and 15yr mortgage rates, 52-week range, MBS spread, rate trend, and refi break-even threshold. Tells an AI agent whether a borrower should consider refinancing.",
+      "price_usdc": 0.6
+    },
+    {
+      "path": "/api/bundle/purchase-market",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Home purchase market bundle: current mortgage rate, median sale price, monthly payment estimate, income required to qualify, and affordability level. Directly answers whether a buyer can afford a median home.",
+      "price_usdc": 0.6
+    },
+    {
+      "path": "/api/bundle/rate-environment",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Rate environment snapshot: FEDFUNDS, SOFR, DGS2, DGS5, DGS10, DGS30 plus yield curve spreads and policy spread. One payment, all rate data.",
+      "price_usdc": 0.35
+    },
+    {
+      "path": "/api/bundle/mortgage-pulse",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Mortgage market pulse: 30yr and 15yr mortgage rates, 10Y Treasury, Fed funds, median home price, housing starts. Includes MBS spread and rate trend.",
+      "price_usdc": 0.4
+    },
+    {
+      "path": "/api/bundle/macro",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Macro health snapshot: GDP, unemployment, CPI, core CPI, Fed funds, yield curve spreads, and Sahm Rule recession signal. Includes cycle phase.",
+      "price_usdc": 0.5
+    },
+    {
+      "path": "/api/bundle/fx-dashboard",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "G10 FX dashboard: all 9 spot rates (EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, USDSEK, USDNOK) plus USD strength index vs basket (30d).",
+      "price_usdc": 0.35
+    },
+    {
+      "path": "/api/bundle/energy",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Energy and commodities bundle: WTI crude, Brent crude, US regular gasoline, Henry Hub natural gas. Includes WTI-Brent spread and market signal.",
+      "price_usdc": 0.25
+    },
+    {
+      "path": "/api/bundle/context-brief",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Economic context brief: 15+ indicators across rates, inflation, employment, FX, and energy in a pre-formatted natural-language paragraph for LLM context injection.",
+      "price_usdc": 0.75
+    },
+    {
+      "path": "/api/crypto/price?coin=",
+      "method": "GET",
+      "category": "Crypto",
+      "description": "Current price, 24h change, market cap, and volume for any supported cryptocurrency. Use ?coin=BTC|ETH|SOL|BNB|XRP|ADA|AVAX|DOGE|LINK|DOT|etc. Source: CoinGecko.",
+      "price_usdc": 0.02
+    },
+    {
+      "path": "/api/crypto/history?coin=&days=",
+      "method": "GET",
+      "category": "Crypto",
+      "description": "Historical daily closing prices for any supported cryptocurrency. Use ?coin=BTC&days=30|90|365. Source: CoinGecko.",
+      "price_usdc": 0.15
+    },
+    {
+      "path": "/api/bundle/crypto",
+      "method": "GET",
+      "category": "Bundles",
+      "description": "Top 20 cryptocurrencies by market cap: price, 24h change, 7d change, market cap, and volume in one call. Source: CoinGecko.",
+      "price_usdc": 0.5
+    },
+    {
+      "path": "/api/edgar/company?ticker=",
+      "method": "GET",
+      "category": "EDGAR",
+      "description": "Company financial fundamentals from SEC EDGAR XBRL: revenue, net income, total assets, stockholders equity, and EPS from 10-K and 10-Q filings. Use ?ticker=AAPL|MSFT|TSLA|AMZN|NVDA|GOOGL|META|etc.",
+      "price_usdc": 0.75
+    }
   ],
   "common_use_cases": {
-    "current_iorb":          "GET /api/current?id=IORB",
-    "current_effr":          "GET /api/current?id=EFFR",
+    "should_i_refinance": "GET /api/calc/refi?current_rate=7.25&balance=400000&remaining_years=28",
+    "is_this_mortgage_offer_good": "GET /api/grade/offer?rate=6.875&loan_amount=450000&points=0.5&credit_score=740&ltv=80",
+    "refinance_market_signal": "GET /api/bundle/refi-signal",
+    "can_buyer_afford_median_home": "GET /api/bundle/purchase-market",
     "current_30yr_mortgage": "GET /api/current?id=MORTGAGE30US",
-    "current_15yr_mortgage": "GET /api/current?id=MORTGAGE15US",
-    "current_fed_funds":     "GET /api/current?id=FEDFUNDS",
     "current_10yr_treasury": "GET /api/current?id=DGS10",
-    "current_30yr_treasury": "GET /api/current?id=DGS30",
-    "current_cpi":           "GET /api/current?id=CPIAUCSL",
-    "current_unemployment":  "GET /api/current?id=UNRATE",
-    "current_sahm_rule":     "GET /api/current?id=SAHMREALTIME",
-    "current_wti_crude":     "GET /api/current?id=DCOILWTICO",
-    "current_brent_crude":   "GET /api/current?id=DCOILBRENTEU",
-    "current_natural_gas":   "GET /api/current?id=DHHNGSP",
-    "current_gasoline":      "GET /api/current?id=GASREGCOVW",
-    "current_eurusd":        "GET /api/fx/current?pair=EURUSD",
-    "yield_curve_spreads":   "GET /api/derived/yield-curve",
-    "recession_signal":      "GET /api/derived/recession",
-    "fed_policy_spread":     "GET /api/derived/policy-spread",
-    "economic_calendar":     "GET /api/calendar?days=30"
+    "current_fed_funds": "GET /api/current?id=FEDFUNDS",
+    "economic_context_for_llm": "GET /api/bundle/context-brief",
+    "recession_signal": "GET /api/derived/recession",
+    "yield_curve_spreads": "GET /api/derived/yield-curve",
+    "current_eurusd": "GET /api/fx/current?pair=EURUSD",
+    "company_fundamentals": "GET /api/edgar/company?ticker=AAPL"
   },
-  "pricing": {
-    "GET /api/current":               "0.01",
-    "GET /api/date":                  "0.01",
-    "GET /api/series/30":             "0.05",
-    "GET /api/series/90":             "0.10",
-    "GET /api/series/365":            "0.25",
-    "GET /api/fx/current":            "0.01",
-    "GET /api/fx/date":               "0.01",
-    "GET /api/fx/series":             "0.05",
-    "GET /api/treasury/current":      "0.01",
-    "GET /api/treasury/date":         "0.01",
-    "GET /api/derived/yield-curve":   "0.03",
-    "GET /api/derived/recession":     "0.03",
-    "GET /api/derived/policy-spread": "0.03",
-    "GET /api/calendar":              "0.01",
-    "GET /api/bundle/rate-environment": "0.35",
-    "GET /api/bundle/mortgage-pulse":   "0.40",
-    "GET /api/bundle/macro":            "0.50",
-    "GET /api/bundle/fx-dashboard":     "0.35",
-    "GET /api/bundle/energy":           "0.25",
-    "GET /api/bundle/context-brief":    "0.75"
-  },
-  "data_sources": {
-    "fred": {
-      "treasury":        ["DGS30","DGS10","DGS5","DGS2","DGS1MO"],
-      "mortgage_housing":["MORTGAGE30US","MORTGAGE15US","MSPUS","HOUST"],
-      "benchmark_rates": ["FEDFUNDS","SOFR","DPRIME","DTB3","IORB","EFFR"],
-      "macro":           ["CPIAUCSL","CPILFESL","UNRATE","SAHMREALTIME","GDP"],
-      "energy":          ["DCOILWTICO","DCOILBRENTEU","GASREGCOVW","DHHNGSP"]
-    },
-    "fx": ["EURUSD","GBPUSD","USDJPY","USDCHF","USDCAD","AUDUSD","NZDUSD","USDSEK","USDNOK"]
-  },
-  "series_count": 24,
-  "legacy_endpoints": {
-    "note": "Backward-compatible aliases maintained for existing integrations",
-    "/api/treasury/current": "alias for /api/current?id=DGS30",
-    "/api/treasury/date":    "alias for /api/date?id=DGS30&d=YYYY-MM-DD"
-  },
-  "contact": "hello@lastlookdata.com",
-  "provider": "LastLook Loans, Inc.",
-  "provider_url": "https://www.lastlookmortgage.com"
+  "free_endpoints": [
+    "GET /api/treasury/public",
+    "GET /health",
+    "GET /openapi.json",
+    "GET /.well-known/x402.json"
+  ]
 }

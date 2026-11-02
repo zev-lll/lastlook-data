@@ -1,25 +1,33 @@
 {
   "name": "lastlook-data",
-  "version": "1.0.0",
-  "description": "LastLook Data - 30yr Treasury Yield API with x402 payments",
+  "version": "2.14.0",
+  "description": "LastLook Data — financial market data and mortgage decision tools for AI agents, paid via x402",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "start:mcp": "MCP_TRANSPORT=http node mcp-server.mjs",
+    "gen:docs": "node scripts/gen-docs.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@coinbase/coinbase-sdk": "^0.25.0",
     "@coinbase/x402": "^2.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@x402/core": "^2.11.0",
-    "@x402/evm": "^2.11.0",
-    "@x402/express": "^2.11.0",
-    "@x402/extensions": "^2.11.0",
+    "@solana/kit": "^5.5.1",
+    "@x402/core": "~2.11.0",
+    "@x402/evm": "~2.11.0",
+    "@x402/express": "~2.11.0",
+    "@x402/extensions": "~2.11.0",
+    "@x402/svm": "~2.11.0",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "node-cache": "^5.1.2",
-    "x402-express": "^1.2.0",
-    "yahoo-finance2": "^3.14.0",
     "zod": "^3.25.76"
+  },
+  "overrides": {
+    "@coinbase/cdp-sdk": "1.55.0"
+  },
+  "engines": {
+    "node": ">=20.18.0"
   }
 }
